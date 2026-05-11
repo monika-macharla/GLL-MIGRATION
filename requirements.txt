@@ -1,0 +1,8 @@
+sqlalchemy
+pyyaml
+pandas
+psycopg2-binary
+pymysql
+cryptography
+boto3
+python-dotenv

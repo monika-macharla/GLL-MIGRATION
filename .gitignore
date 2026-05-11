@@ -1,0 +1,20 @@
+# Databases
+*.db
+*.sqlite
+
+# Storage
+migration_uploads/*
+!migration_uploads/.gitkeep
+
+# Environment & Dependencies
+.venv/
+node_modules/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+*.log

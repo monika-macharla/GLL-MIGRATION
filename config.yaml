@@ -1,0 +1,25 @@
+source_db:
+  # Use structured config to handle special characters in passwords automatically
+  type: "mysql"
+  host: "localhost"
+  port: 3306
+  username: "root"
+  password: "your_password"
+  database: "source_db"
+
+destination_db:
+  type: "mysql"
+  host: "localhost"
+  port: 3306
+  username: "root"
+  password: "your_password"
+  database: "dest_db"
+
+mappings:
+  - source_table: "source_users"
+    destination_table: "dest_users"
+    columns:
+      id: "user_id"
+      name: "full_name"
+      email: "email"
+      created_at: "date_joined"
