@@ -1,6 +1,7 @@
 import uuid
 import logging
 from sqlalchemy import select, insert
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from .base_migrator import BaseMigrator
 
 logger = logging.getLogger(__name__)
@@ -54,33 +55,57 @@ class InstitutionMigrator(BaseMigrator):
         with self.source_engine.connect() as source_conn:
             results = source_conn.execute(query)
             
-            insert_data = []
-            for row in results:
-                row_dict = row._mapping
-                
-                new_uuid = str(uuid.uuid4())
-                inst_id = row_dict[institution_table.c.id]
-                self.engine.id_map[inst_id] = new_uuid # Store mapping in main engine
-                
-                mapped_row = {
-                    'uuid': new_uuid,
-                    'name': row_dict[institution_table.c.name],
-                    'description': row_dict[institution_table.c.description],
-                    'type': self._map_type(row_dict[institution_table.c.institution_type]),
-                    'seal': self.storage.upload_base64(row_dict[institution_table.c.institution_seal], f"seals/{new_uuid}.png"),
-                    'logo': self.storage.upload_base64(row_dict[institution_table.c.logo], f"logos/{new_uuid}.png"),
-                    'address1': row_dict[address_table.c.address_line_1] if row_dict[address_table.c.id] else None,
-                    'address2': row_dict[address_table.c.address_line_2] if row_dict[address_table.c.id] else None,
-                    'city': row_dict[address_table.c.city] if row_dict[address_table.c.id] else None,
-                    'state': self._map_state(row_dict[state_table.c.state_code]) if row_dict[address_table.c.id] else 0,
-                    'zipcode': row_dict[address_table.c.zip_code] if row_dict[address_table.c.id] else None,
-                    'country': self._map_country(row_dict[country_table.c.country_code]) if row_dict[address_table.c.id] else 0,
-                    'phone_number': row_dict[institution_table.c.phone_number],
-                    'notification_email': row_dict[institution_table.c.notification_email],
-                    'is_scholarship_enabled': bool(row_dict[institution_table.c.enable_scholarships]),
-                    'institution_status': 1 if row_dict[institution_table.c.active] else 2,
-                }
-                insert_data.append(mapped_row)
+            rows = results.all()
+            if not rows:
+                return 0
+
+            logger.info(f"Processing {len(rows)} institutions and their images...")
+            
+            # Prepare upload tasks
+            upload_tasks = []
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                for row in rows:
+                    row_dict = row._mapping
+                    new_uuid = str(uuid.uuid4())
+                    inst_id = row_dict[institution_table.c.id]
+                    self.engine.id_map[inst_id] = new_uuid
+                    
+                    # Submit upload tasks
+                    seal_future = executor.submit(
+                        self.storage.upload_base64, 
+                        row_dict[institution_table.c.institution_seal], 
+                        f"seals/{new_uuid}.png"
+                    )
+                    logo_future = executor.submit(
+                        self.storage.upload_base64, 
+                        row_dict[institution_table.c.logo], 
+                        f"logos/{new_uuid}.png"
+                    )
+                    
+                    upload_tasks.append((new_uuid, row_dict, seal_future, logo_future))
+
+                # Build final insert data
+                insert_data = []
+                for new_uuid, row_dict, seal_future, logo_future in upload_tasks:
+                    mapped_row = {
+                        'uuid': new_uuid,
+                        'name': row_dict[institution_table.c.name],
+                        'description': row_dict[institution_table.c.description],
+                        'type': self._map_type(row_dict[institution_table.c.institution_type]),
+                        'seal': seal_future.result(),
+                        'logo': logo_future.result(),
+                        'address1': row_dict[address_table.c.address_line_1] if row_dict[address_table.c.id] else None,
+                        'address2': row_dict[address_table.c.address_line_2] if row_dict[address_table.c.id] else None,
+                        'city': row_dict[address_table.c.city] if row_dict[address_table.c.id] else None,
+                        'state': self._map_state(row_dict[state_table.c.state_code]) if row_dict[address_table.c.id] else 0,
+                        'zipcode': row_dict[address_table.c.zip_code] if row_dict[address_table.c.id] else None,
+                        'country': self._map_country(row_dict[country_table.c.country_code]) if row_dict[address_table.c.id] else 0,
+                        'phone_number': row_dict[institution_table.c.phone_number],
+                        'notification_email': row_dict[institution_table.c.notification_email],
+                        'is_scholarship_enabled': bool(row_dict[institution_table.c.enable_scholarships]),
+                        'institution_status': 1 if row_dict[institution_table.c.active] else 2,
+                    }
+                    insert_data.append(mapped_row)
 
             if insert_data:
                 dest_conn.execute(insert(dest_table), insert_data)
@@ -131,18 +156,18 @@ class InstitutionMigrator(BaseMigrator):
 
                 mapped_row = {
                     'uuid': str(uuid.uuid4()),
-                    'campus_name': row_dict[institution_table.c.name],
-                    'campus_id': row_dict[institution_table.c.school_code] or str(row_dict[institution_table.c.id]),
+                    'campus_name': row_dict.get(institution_table.c.name) or row_dict.get('name'),
+                    'campus_id': row_dict.get(institution_table.c.school_code) or str(row_dict.get(institution_table.c.id)) or str(row_dict.get('id')),
                     'institution_uuid': parent_uuid,
-                    'description': row_dict[institution_table.c.description],
-                    'address1': row_dict[address_table.c.address_line_1] if row_dict[address_table.c.id] else None,
-                    'address2': row_dict[address_table.c.address_line_2] if row_dict[address_table.c.id] else None,
-                    'city': row_dict[address_table.c.city] if row_dict[address_table.c.id] else None,
-                    'state': self._map_state(row_dict[state_table.c.state_code]) if row_dict[address_table.c.id] else 0,
-                    'zipcode': row_dict[address_table.c.zip_code] if row_dict[address_table.c.id] else None,
-                    'country': self._map_country(row_dict[country_table.c.country_code]) if row_dict[address_table.c.id] else 0,
-                    'phone_number': row_dict[institution_table.c.phone_number],
-                    'campus_status': 1 if row_dict[institution_table.c.active] else 2,
+                    'description': row_dict.get(institution_table.c.description) or row_dict.get('description'),
+                    'address1': row_dict.get(address_table.c.address_line_1) if row_dict.get(address_table.c.id) else None,
+                    'address2': row_dict.get(address_table.c.address_line_2) if row_dict.get(address_table.c.id) else None,
+                    'city': row_dict.get(address_table.c.city) if row_dict.get(address_table.c.id) else None,
+                    'state': self._map_state(row_dict.get(state_table.c.state_code)) if row_dict.get(address_table.c.id) else 0,
+                    'zipcode': row_dict.get(address_table.c.zip_code) if row_dict.get(address_table.c.id) else None,
+                    'country': self._map_country(row_dict.get(country_table.c.country_code)) if row_dict.get(address_table.c.id) else 0,
+                    'phone_number': row_dict.get(institution_table.c.phone_number) or row_dict.get('phone_number'),
+                    'campus_status': 1 if row_dict.get(institution_table.c.active) or row_dict.get('active') else 2,
                 }
                 insert_data.append(mapped_row)
 

@@ -24,7 +24,7 @@ class S3StorageService:
         Returns the path/URL. Fallbacks to a default logo on error.
         """
         fallback_url = "https://gll-dev.s3.amazonaws.com/logos/f55c7f71-048a-4248-ac98-1557a679be05.png"
-        return fallback_url
+        # return fallback_url
         if not base64_str or not isinstance(base64_str, str) or len(base64_str) < 100: 
             return fallback_url
 

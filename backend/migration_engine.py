@@ -2,6 +2,7 @@ import yaml
 import logging
 import urllib.parse
 from sqlalchemy import create_engine, Table, MetaData, select, insert, Column, inspect
+from sqlalchemy.engine import URL
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,29 +24,23 @@ class MigrationEngine:
     def _get_engine(self, db_config: dict):
         """Create a SQLAlchemy engine from config, handling special characters in passwords"""
         if 'url' in db_config:
-            # If a URL is provided, we use it as is, but this might still fail if it's not pre-encoded
             return create_engine(db_config['url'])
         
-        # Build from components if provided
         db_type = db_config.get('type', 'mysql')
         if db_type == 'sqlite':
-            return create_engine(f"sqlite:///{db_config['database']}")
+            return create_engine(URL.create("sqlite", database=db_config['database']))
         
-        user = urllib.parse.quote_plus(db_config.get('username', ''))
-        password = urllib.parse.quote_plus(db_config.get('password', ''))
-        host = db_config.get('host', 'localhost')
-        port = db_config.get('port')
-        database = db_config.get('database', '')
+        drivername = "postgresql" if db_type == "postgresql" else "mysql+pymysql"
+        default_port = 5432 if db_type == "postgresql" else 3306
         
-        if db_type == 'postgresql':
-            port = port or 5432
-            url = f"postgresql://{user}:{password}@{host}:{port}/{database}"
-        elif db_type == 'mysql':
-            port = port or 3306
-            url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
-        else:
-            raise ValueError(f"Unsupported database type: {db_type}")
-            
+        url = URL.create(
+            drivername=drivername,
+            username=db_config.get('username'),
+            password=db_config.get('password'),
+            host=db_config.get('host', '127.0.0.1'),
+            port=db_config.get('port') or default_port,
+            database=db_config.get('database')
+        )
         return create_engine(url)
 
     def _manual_reflect(self, table_name, engine, metadata):

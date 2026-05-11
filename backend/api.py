@@ -7,6 +7,7 @@ from gll_migration_engine import GLLMigrationEngine
 from history_manager import HistoryManager
 import logging
 import urllib.parse
+from sqlalchemy.engine import URL
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,15 +48,23 @@ class MigrationRequest(BaseModel):
     mappings: List[TableMapping]
     limit: Optional[int] = None
 
-def get_url(config: DBConfig) -> str:
-    if config.db_type == "sqlite":
-        return f"sqlite:///{config.database}"
-    elif config.db_type == "postgresql":
-        return f"postgresql://{config.username}:{config.password}@{config.host}:{config.port}/{config.database}"
-    elif config.db_type == "mysql":
-        return f"mysql+pymysql://{config.username}:{config.password}@{config.host}:{config.port}/{config.database}"
-    else:
-        raise ValueError(f"Unsupported database type: {config.db_type}")
+def get_url(config: DBConfig):
+    db_type = config.db_type or "mysql"
+    
+    if db_type == "sqlite":
+        return URL.create("sqlite", database=config.database)
+    
+    drivername = "postgresql" if db_type == "postgresql" else "mysql+pymysql"
+    default_port = 5432 if db_type == "postgresql" else 3306
+    
+    return URL.create(
+        drivername=drivername,
+        username=config.username,
+        password=config.password,
+        host=config.host or "127.0.0.1",
+        port=config.port or default_port,
+        database=config.database
+    )
 
 
 @app.post("/migrate")
