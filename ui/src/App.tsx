@@ -29,22 +29,22 @@ interface HistoryLog {
 }
 
 function App() {
-  const [source, setSource] = useState<DBConfig>({
-    db_type: 'mysql',
-    host: 'localhost',
-    port: 3306,
-    username: 'root',
-    password: 'xelpmoc',
-    database: 'gll_1_dev'
-  });
+const [source, setSource] = useState<DBConfig>({
+  db_type: 'mysql',
+  host: 'localhost',
+  port: 3306,
+  username: 'root',
+  password: 'Admin!1',
+  database: 'dcccd'
+});
 
   const [dest, setDest] = useState<DBConfig>({
     db_type: 'mysql',
     host: 'localhost',
     port: 3306,
     username: 'root',
-    password: 'xelpmoc',
-    database: 'gllauthservice'
+    password: 'Admin!1',
+    database: 'gllauthservicemigration'
   });
 
   const [sourceSchema, setSourceSchema] = useState<Record<string, string[]>>({});

@@ -6,3 +6,5 @@ pymysql
 cryptography
 boto3
 python-dotenv
+fastapi
+uvicorn
