@@ -44,7 +44,8 @@ const [source, setSource] = useState<DBConfig>({
     port: 3306,
     username: 'root',
     password: 'Admin!1',
-    database: 'gllauthservicemigration'
+    // database: 'gllauthservicemigration'
+    database: 'gllreportsmigration'
   });
 
   const [sourceSchema, setSourceSchema] = useState<Record<string, string[]>>({});
