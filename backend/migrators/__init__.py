@@ -3,4 +3,7 @@ from .base_migrator import BaseMigrator
 from .users_migrator import UsersMigrator
 from .password_migrator import PasswordMigrator
 from .user_institution_migrator import UserInstitutionMigrator
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator']
+from .user_enrollments_migrator import UserEnrollmentMigrator
+from  .gl_student_migrator import GLStudentMigrator
+from .badges_migration import DigitalBadgesMigrator
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator']

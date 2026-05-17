@@ -215,7 +215,11 @@ async def migrate(request: MigrationRequest):
 
                 "user_hashed_password",
                 
-                "user_institution"
+                "user_institution",
+
+                "user_enrollments",
+                
+                "credentials_digital_badges"
             ]
 
             or
@@ -231,7 +235,11 @@ async def migrate(request: MigrationRequest):
 
                 "gl_user",
 
-                "institution_user"
+                "institution_user",
+
+                "student_enrollment",
+                
+                "badge"
             ]
 
             for m in request.mappings

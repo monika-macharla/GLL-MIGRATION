@@ -8,7 +8,10 @@ from migrators import (
     InstitutionMigrator,
     UsersMigrator,
     PasswordMigrator,
-    UserInstitutionMigrator
+    UserInstitutionMigrator,
+    UserEnrollmentMigrator,
+    GLStudentMigrator,
+    
 )
 
 # -----------------------------------------
@@ -22,6 +25,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------
 # GLL Migration Engine
 # -----------------------------------------
+
 
 class GLLMigrationEngine:
 
@@ -183,20 +187,57 @@ class GLLMigrationEngine:
         migrators = []
 
         # -----------------------------------------
-        # USERS MIGRATION
-        # ONLY users/profile/role
+        # gl_user MIGRATION
         # -----------------------------------------
 
         user_selected = any(
 
-            m.get("destination_table") in [
+            (
+                m.get("source_table")
+                == "gl_user"
+            )
 
-                "users",
+            and
 
-                "user_profile",
+            (
+                m.get("destination_table")
+                in [
 
-                "user_role"
-            ]
+                    "users",
+
+                    "user_profile",
+
+                    "user_role"
+                ]
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # gl_student MIGRATION
+        # -----------------------------------------
+
+        gl_student_selected = any(
+
+            (
+                m.get("source_table")
+                == "gl_student"
+            )
+
+            and
+
+            (
+                m.get("destination_table")
+                in [
+
+                    "users",
+
+                    "user_profile",
+
+                    "user_role"
+                ]
+            )
 
             for m in mappings
         )
@@ -258,12 +299,29 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # USER ENROLLMENT MIGRATION
+        # -----------------------------------------
+
+        user_enrollment_selected = any(
+
+            m.get("destination_table")
+            == "user_enrollments"
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
         logger.info(
             f"user_selected="
             f"{user_selected}"
+        )
+
+        logger.info(
+            f"gl_student_selected="
+            f"{gl_student_selected}"
         )
 
         logger.info(
@@ -281,8 +339,14 @@ class GLLMigrationEngine:
             f"{user_institution_selected}"
         )
 
+        logger.info(
+            f"user_enrollment_selected="
+            f"{user_enrollment_selected}"
+        )
+
         # -----------------------------------------
         # Add UsersMigrator
+        # gl_user
         # -----------------------------------------
 
         if user_selected:
@@ -294,6 +358,33 @@ class GLLMigrationEngine:
             migrators.append(
 
                 UsersMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add GLStudentMigrator
+        # gl_student
+        # -----------------------------------------
+
+        if gl_student_selected:
+
+            logger.info(
+                "Adding GLStudentMigrator"
+            )
+
+            migrators.append(
+
+                GLStudentMigrator(
 
                     self,
 
@@ -373,6 +464,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 UserInstitutionMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add UserEnrollmentMigrator
+        # -----------------------------------------
+
+        if user_enrollment_selected:
+
+            logger.info(
+                "Adding UserEnrollmentMigrator"
+            )
+
+            migrators.append(
+
+                UserEnrollmentMigrator(
 
                     self,
 
