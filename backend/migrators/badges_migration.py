@@ -111,6 +111,15 @@ class DigitalBadgesMigrator(BaseMigrator):
             self.metadata_dest
         )
 
+        credentials_table = self._manual_reflect(
+
+            'credentials_all',
+
+            self.dest_engine,
+
+            self.metadata_dest
+        )
+
         logger.info(
             "Successfully reflected tables"
         )
@@ -145,6 +154,8 @@ class DigitalBadgesMigrator(BaseMigrator):
             insert_data = []
 
             badge_info_insert_data = []
+
+            credentials_insert_data = []
 
             # -------------------------------------------------
             # PROCESS ROWS
@@ -701,6 +712,76 @@ class DigitalBadgesMigrator(BaseMigrator):
                         badge_info_row
                     )
 
+                    # -------------------------------------------------
+                    # CREDENTIALS TABLE
+                    # -------------------------------------------------
+
+                    credentials_row = {
+
+                        'uuid': str(
+                            uuid.uuid4()
+                        ),
+
+                        'created_at': created_at,
+
+                        'updated_at': created_at,
+
+                        'user_id':
+                            destination_user_uuid,
+
+                        'student_user_name':
+                            source_username,
+
+                        'institution_name':
+                            issuer_name,
+
+                        'student_id':
+                            str(source_student_id),
+
+                        'student_email':
+                            source_username,
+
+                        'credential_claim_status': 0,
+
+                        'is_registered': 1,
+
+                        'institution_id':
+                            institution_uuid,
+
+                        'status': 2,
+
+                        'credential_type': 3,
+
+                        'credential_path': None,
+
+                        'enrollment_code':
+                            enrollment_code,
+
+                        'created_by':
+                            created_by_uuid,
+
+                        'updated_by':
+                            created_by_uuid,
+
+                        'digital_badges':
+                            badge_uuid,
+
+                        'issued_on':
+                            str(created_at),
+
+                        'badge_image':
+                            image_path,
+                    }
+
+                    logger.info(
+                        f"Credentials row: "
+                        f"{credentials_row}"
+                    )
+
+                    credentials_insert_data.append(
+                        credentials_row
+                    )
+
                 except Exception as e:
 
                     logger.exception(
@@ -722,6 +803,10 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                 with self.dest_engine.begin() as dest_conn:
 
+                    # -----------------------------------------
+                    # INSERT DIGITAL BADGES
+                    # -----------------------------------------
+
                     result = dest_conn.execute(
 
                         insert(dest_table),
@@ -730,9 +815,13 @@ class DigitalBadgesMigrator(BaseMigrator):
                     )
 
                     logger.info(
-                        f"Inserted rows: "
+                        f"Inserted digital badge rows: "
                         f"{result.rowcount}"
                     )
+
+                    # -----------------------------------------
+                    # INSERT BADGE INFO
+                    # -----------------------------------------
 
                     if badge_info_insert_data:
 
@@ -746,6 +835,24 @@ class DigitalBadgesMigrator(BaseMigrator):
                         logger.info(
                             f"Inserted badge info rows: "
                             f"{badge_info_result.rowcount}"
+                        )
+
+                    # -----------------------------------------
+                    # INSERT CREDENTIALS
+                    # -----------------------------------------
+
+                    if credentials_insert_data:
+
+                        credentials_result = dest_conn.execute(
+
+                            insert(credentials_table),
+
+                            credentials_insert_data
+                        )
+
+                        logger.info(
+                            f"Inserted credentials rows: "
+                            f"{credentials_result.rowcount}"
                         )
 
                 logger.info(
