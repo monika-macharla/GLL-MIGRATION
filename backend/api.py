@@ -44,7 +44,30 @@ app.add_middleware(
 # Request Models
 # -------------------------------------------------
 
+
 class DBConfig(BaseModel):
+
+    db_type: str
+
+    host: Optional[str] = None
+
+    port: Optional[int] = None
+
+    username: Optional[str] = None
+
+    password: Optional[str] = None
+
+    database: str
+
+
+# -------------------------------------------------
+# Lookup Database Config
+# -------------------------------------------------
+
+
+class LookupDBConfig(BaseModel):
+
+    name: str
 
     db_type: str
 
@@ -82,6 +105,14 @@ class MigrationRequest(BaseModel):
     destination: DBConfig
 
     mappings: List[TableMapping]
+
+    # -----------------------------------------
+    # Multiple Lookup DBs
+    # -----------------------------------------
+
+    lookup_databases: Optional[
+        List[LookupDBConfig]
+    ] = []
 
     limit: Optional[int] = None
 
@@ -189,8 +220,24 @@ async def migrate(request: MigrationRequest):
                 for m in request.mappings
             ],
 
-            "limit": request.limit
+            "limit": request.limit,
+
+            # -----------------------------------------
+            # Lookup Databases
+            # -----------------------------------------
+
+            "lookup_databases": [
+
+                db.model_dump()
+
+                for db in request.lookup_databases
+            ]
         }
+
+        logger.info(
+            f"Lookup DBs received: "
+            f"{config['lookup_databases']}"
+        )
 
         # -------------------------------------------------
         # Detect GLL Migrations

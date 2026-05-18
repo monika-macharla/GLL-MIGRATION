@@ -10,6 +10,10 @@ interface DBConfig {
   database: string;
 }
 
+interface LookupDBConfig extends DBConfig {
+  name: string;
+}
+
 interface TableMapping {
   source_table: string;
   destination_table: string;
@@ -48,6 +52,18 @@ const [source, setSource] = useState<DBConfig>({
     database: 'gllreportsmigration'
   });
 
+  const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
+  {
+    name: 'auth_db',
+    db_type: 'mysql',
+    host: 'localhost',
+    port: 3306,
+    username: 'root',
+    password: 'Admin!1',
+    database: 'gllauthservicemigration'
+  }
+]);
+
   const [sourceSchema, setSourceSchema] = useState<Record<string, string[]>>({});
   const [destSchema, setDestSchema] = useState<Record<string, string[]>>({});
   const [mappings, setMappings] = useState<TableMapping[]>([]);
@@ -58,10 +74,11 @@ const [source, setSource] = useState<DBConfig>({
     message: ''
   });
 
-  const [testResults, setTestResults] = useState<{ source: string, dest: string }>({
-    source: '',
-    dest: ''
-  });
+  const [testResults, setTestResults] = useState<any>({
+  source: '',
+  dest: '',
+  lookup: {}
+});
   const [limit, setLimit] = useState<number | undefined>(undefined);
 
   useEffect(() => {
@@ -116,6 +133,59 @@ const [source, setSource] = useState<DBConfig>({
     }
   };
 
+  const handleLookupTestConnection = async (
+  lookup: LookupDBConfig,
+  index: number
+) => {
+
+  setTestResults((prev: any) => ({
+    ...prev,
+    lookup: {
+      ...prev.lookup,
+      [index]: 'Testing...'
+    }
+  }));
+
+  try {
+
+    const response = await fetch(
+      'http://localhost:8000/test-connection',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(lookup)
+      }
+    );
+
+    const data = await response.json();
+
+    const success =
+      data.status === 'success';
+
+    setTestResults((prev: any) => ({
+      ...prev,
+      lookup: {
+        ...prev.lookup,
+        [index]: success
+          ? 'Connected'
+          : 'Failed'
+      }
+    }));
+
+  } catch {
+
+    setTestResults((prev: any) => ({
+      ...prev,
+      lookup: {
+        ...prev.lookup,
+        [index]: 'Error'
+      }
+    }));
+  }
+};
+
   const handleMigrate = async () => {
     if (mappings.length === 0) {
       setStatus({ type: 'error', message: 'Please add at least one table mapping' });
@@ -131,6 +201,7 @@ const [source, setSource] = useState<DBConfig>({
           source,
           destination: dest,
           mappings,
+          lookup_databases: lookupDatabases,
           limit
         })
       });
@@ -232,6 +303,201 @@ const [source, setSource] = useState<DBConfig>({
         {renderConfigForm("Source Database", source, setSource, 'source')}
         {renderConfigForm("Destination Database", dest, setDest, 'dest')}
       </div>
+
+      <div
+  className="card"
+  style={{ marginTop: '2rem' }}
+>
+
+  <h2 className="card-title">
+    <Database size={20} color="#22c55e" />
+    Lookup Databases
+  </h2>
+
+  {lookupDatabases.map((lookup, index) => (
+
+    <div
+      key={index}
+      style={{
+        marginBottom: '2rem',
+        padding: '1rem',
+        border: '1px solid hsl(var(--border))',
+        borderRadius: 'var(--radius)'
+      }}
+    >
+
+      <div className="form-group">
+        <label>Lookup Name</label>
+
+        <input
+          type="text"
+          value={lookup.name}
+          onChange={(e) => {
+
+            const updated = [...lookupDatabases];
+
+            updated[index].name =
+              e.target.value;
+
+            setLookupDatabases(updated);
+          }}
+        />
+      </div>
+
+      <div
+        className="grid"
+        style={{
+          gridTemplateColumns: '3fr 1fr',
+          gap: '1rem'
+        }}
+      >
+
+        <div className="form-group">
+          <label>Host</label>
+
+          <input
+            type="text"
+            value={lookup.host}
+            onChange={(e) => {
+
+              const updated = [...lookupDatabases];
+
+              updated[index].host =
+                e.target.value;
+
+              setLookupDatabases(updated);
+            }}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Port</label>
+
+          <input
+            type="number"
+            value={lookup.port}
+            onChange={(e) => {
+
+              const updated = [...lookupDatabases];
+
+              updated[index].port =
+                parseInt(e.target.value);
+
+              setLookupDatabases(updated);
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>Username</label>
+
+        <input
+          type="text"
+          value={lookup.username}
+          onChange={(e) => {
+
+            const updated = [...lookupDatabases];
+
+            updated[index].username =
+              e.target.value;
+
+            setLookupDatabases(updated);
+          }}
+        />
+      </div>
+
+      <div className="form-group">
+        <label>Password</label>
+
+        <input
+          type="password"
+          value={lookup.password}
+          onChange={(e) => {
+
+            const updated = [...lookupDatabases];
+
+            updated[index].password =
+              e.target.value;
+
+            setLookupDatabases(updated);
+          }}
+        />
+      </div>
+
+      <div className="form-group">
+        <label>Database Name</label>
+
+        <input
+          type="text"
+          value={lookup.database}
+          onChange={(e) => {
+
+            const updated = [...lookupDatabases];
+
+            updated[index].database =
+              e.target.value;
+
+            setLookupDatabases(updated);
+          }}
+        />
+      </div>
+
+      <button
+        className="btn btn-secondary"
+        onClick={() =>
+          handleLookupTestConnection(
+            lookup,
+            index
+          )
+        }
+      >
+        Test Lookup Connection
+      </button>
+
+      {testResults.lookup[index] && (
+
+        <span
+          className={`status-badge ${
+            testResults.lookup[index]
+            === 'Connected'
+
+            ? 'status-success'
+
+            : 'status-error'
+          }`}
+          style={{ marginLeft: '1rem' }}
+        >
+          {testResults.lookup[index]}
+        </span>
+      )}
+    </div>
+  ))}
+
+  <button
+    className="btn btn-primary"
+    onClick={() => {
+
+      setLookupDatabases([
+
+        ...lookupDatabases,
+
+        {
+          name: '',
+          db_type: 'mysql',
+          host: '',
+          port: 3306,
+          username: '',
+          password: '',
+          database: ''
+        }
+      ]);
+    }}
+  >
+    <Plus size={16} />
+    Add Lookup DB
+  </button>
+</div>
 
       <div className="grid" style={{ gridTemplateColumns: '250px 1fr', gap: '2rem', alignItems: 'start' }}>
         {/* Sidebar for Source Tables */}
@@ -387,7 +653,8 @@ const [source, setSource] = useState<DBConfig>({
                 className="btn btn-primary"
                 style={{ height: '40px', marginTop: '1.2rem', flex: 2 }}
                 onClick={handleMigrate}
-                disabled={status.type === 'loading' || testResults.source !== 'Connected' || testResults.dest !== 'Connected'}
+                disabled={status.type === 'loading' || testResults.source !== 'Connected' || testResults.dest !== 'Connected'||Object.values(testResults.lookup || {})
+    .some(v => v !== 'Connected')}
               >
                 {status.type === 'loading' ? (
                   <Loader2 className="animate-spin" />

@@ -1,17 +1,29 @@
 import logging
-from sqlalchemy import create_engine, MetaData
+
+from sqlalchemy import (
+    create_engine,
+    MetaData
+)
+
 from sqlalchemy.engine import URL
 
 from s3_service import S3StorageService
 
 from migrators import (
+
     InstitutionMigrator,
+
     UsersMigrator,
+
     PasswordMigrator,
+
     UserInstitutionMigrator,
+
     UserEnrollmentMigrator,
+
     GLStudentMigrator,
-    
+
+    DigitalBadgesMigrator
 )
 
 # -----------------------------------------
@@ -31,22 +43,53 @@ class GLLMigrationEngine:
 
     def __init__(self, config: dict):
 
+        # -----------------------------------------
+        # Config
+        # -----------------------------------------
+
         self.config = config
+
+        # -----------------------------------------
+        # FORCE LIMIT 5 FOR TESTING
+        # -----------------------------------------
+
+        self.config["limit"] = 5
+
+        logger.info(
+            "Migration limit forced "
+            "to 5 records for testing"
+        )
 
         # -----------------------------------------
         # Source DB
         # -----------------------------------------
 
+        logger.info(
+            "Creating source DB engine"
+        )
+
         self.source_engine = self._get_engine(
             self.config['source_db']
+        )
+
+        logger.info(
+            "Source DB engine created"
         )
 
         # -----------------------------------------
         # Destination DB
         # -----------------------------------------
 
+        logger.info(
+            "Creating destination DB engine"
+        )
+
         self.dest_engine = self._get_engine(
             self.config['destination_db']
+        )
+
+        logger.info(
+            "Destination DB engine created"
         )
 
         # -----------------------------------------
@@ -69,17 +112,70 @@ class GLLMigrationEngine:
 
         self.storage = S3StorageService()
 
+        # -----------------------------------------
+        # Lookup DB Engines
+        # -----------------------------------------
+
+        self.lookup_engines = {}
+
+        lookup_databases = self.config.get(
+            "lookup_databases",
+            []
+        )
+
+        logger.info(
+            f"Received lookup DB configs: "
+            f"{lookup_databases}"
+        )
+
+        for db in lookup_databases:
+
+            try:
+
+                logger.info(
+                    f"Creating lookup DB engine: "
+                    f"{db['name']}"
+                )
+
+                self.lookup_engines[
+                    db['name']
+                ] = self._get_engine(db)
+
+                logger.info(
+                    f"Successfully created "
+                    f"lookup engine for "
+                    f"{db['name']}"
+                )
+
+            except Exception as e:
+
+                logger.exception(
+                    f"Failed creating lookup "
+                    f"engine for "
+                    f"{db['name']}: {e}"
+                )
+
     # -----------------------------------------
     # Create Engine
     # -----------------------------------------
 
     def _get_engine(self, db_config: dict):
 
+        logger.info(
+            f"Creating SQLAlchemy engine "
+            f"for DB config: "
+            f"{db_config}"
+        )
+
         # -----------------------------------------
         # Direct URL
         # -----------------------------------------
 
         if 'url' in db_config:
+
+            logger.info(
+                "Using direct DB URL"
+            )
 
             return create_engine(
                 db_config['url']
@@ -95,6 +191,10 @@ class GLLMigrationEngine:
         # -----------------------------------------
 
         if db_type == 'sqlite':
+
+            logger.info(
+                "Creating SQLite engine"
+            )
 
             return create_engine(
 
@@ -152,6 +252,12 @@ class GLLMigrationEngine:
             )
         )
 
+        logger.info(
+            f"Engine URL created for "
+            f"database: "
+            f"{db_config.get('database')}"
+        )
+
         return create_engine(url)
 
     # -----------------------------------------
@@ -170,6 +276,11 @@ class GLLMigrationEngine:
 
         logger.info(
             "====================================="
+        )
+
+        logger.info(
+            f"Available lookup engines: "
+            f"{list(self.lookup_engines.keys())}"
         )
 
         total_migrated = 0
@@ -311,6 +422,27 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # DIGITAL BADGES MIGRATION
+        # -----------------------------------------
+
+        digital_badges_selected = any(
+
+            (
+                m.get("source_table")
+                == "badge"
+            )
+
+            and
+
+            (
+                m.get("destination_table")
+                == "credentials_digital_badges"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -344,9 +476,13 @@ class GLLMigrationEngine:
             f"{user_enrollment_selected}"
         )
 
+        logger.info(
+            f"digital_badges_selected="
+            f"{digital_badges_selected}"
+        )
+
         # -----------------------------------------
         # Add UsersMigrator
-        # gl_user
         # -----------------------------------------
 
         if user_selected:
@@ -373,7 +509,6 @@ class GLLMigrationEngine:
 
         # -----------------------------------------
         # Add GLStudentMigrator
-        # gl_student
         # -----------------------------------------
 
         if gl_student_selected:
@@ -400,7 +535,6 @@ class GLLMigrationEngine:
 
         # -----------------------------------------
         # Add PasswordMigrator
-        # MUST RUN AFTER USERS
         # -----------------------------------------
 
         if password_selected:
@@ -504,6 +638,32 @@ class GLLMigrationEngine:
             )
 
         # -----------------------------------------
+        # Add DigitalBadgesMigrator
+        # -----------------------------------------
+
+        if digital_badges_selected:
+
+            logger.info(
+                "Adding DigitalBadgesMigrator"
+            )
+
+            migrators.append(
+
+                DigitalBadgesMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
         # No Migrators
         # -----------------------------------------
 
@@ -522,16 +682,34 @@ class GLLMigrationEngine:
         for migrator in migrators:
 
             logger.info(
+                f"====================================="
+            )
+
+            logger.info(
                 f"Running "
+                f"{migrator.__class__.__name__}"
+            )
+
+            logger.info(
+                f"Starting execution of "
                 f"{migrator.__class__.__name__}"
             )
 
             migrated_count = migrator.migrate()
 
             logger.info(
+                f"Completed execution of "
+                f"{migrator.__class__.__name__}"
+            )
+
+            logger.info(
                 f"{migrator.__class__.__name__} "
                 f"migrated "
                 f"{migrated_count} records."
+            )
+
+            logger.info(
+                f"====================================="
             )
 
             total_migrated += migrated_count
