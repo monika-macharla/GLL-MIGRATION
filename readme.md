@@ -3,19 +3,19 @@
 ```
 source db:                          destination db
 
-institutions                        institutions,campuses
+institutions                        institutions,campuses(gllauthservicemigration)
 
-gl_user                             users,user_role,user_profile
+gl_user                             users,user_role,user_profile(gllauthservicemigration)
 
-gl_student                          users,user_role,user_profile
+gl_student                          users,user_role,user_profile(gllauthservicemigration)
 
-institution_user                    user_institution
+institution_user                    user_institution(gllauthservicemigration)
 
-jhi_user                            user_hashed_password
+jhi_user                            user_hashed_password(gllauthservicemigration)
 
-enrollment                          user_enrollments
+enrollment                          user_enrollments(gllauthservicemigration)
 
-badge                               credentials_digital_badges,
+badge                               credentials_digital_badges,(gllreports)(suppport gllauthservicemigration)
                                     credentials_digital_badge_info
 
 
