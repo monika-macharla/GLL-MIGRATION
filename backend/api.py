@@ -15,6 +15,7 @@ from sqlalchemy.engine import URL
 # -------------------------------------------------
 
 logging.basicConfig(level=logging.INFO)
+#add the suport of resume migrator also in this file
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +267,13 @@ async def migrate(request: MigrationRequest):
 
                 "user_enrollments",
                 
-                "credentials_digital_badges"
+                "credentials_digital_badges",
+                
+                "credentials_resume",
+                
+                "credentials_all",
+                
+                "credentials_recommendation_letters"
             ]
 
             or
@@ -286,7 +293,11 @@ async def migrate(request: MigrationRequest):
 
                 "student_enrollment",
                 
-                "badge"
+                "badge",
+                
+                "resume",
+                
+                "recommendation_request",
             ]
 
             for m in request.mappings

@@ -23,7 +23,12 @@ from migrators import (
 
     GLStudentMigrator,
 
-    DigitalBadgesMigrator
+    DigitalBadgesMigrator,
+    
+    ResumeMigrator,
+    
+    RecommendationLetterMigrator
+
 )
 
 # -----------------------------------------
@@ -48,17 +53,6 @@ class GLLMigrationEngine:
         # -----------------------------------------
 
         self.config = config
-
-        # -----------------------------------------
-        # FORCE LIMIT 5 FOR TESTING
-        # -----------------------------------------
-
-        self.config["limit"] = 5
-
-        logger.info(
-            "Migration limit forced "
-            "to 5 records for testing"
-        )
 
         # -----------------------------------------
         # Source DB
@@ -441,7 +435,49 @@ class GLLMigrationEngine:
 
             for m in mappings
         )
+        
+        
+                # -----------------------------------------
+        # RESUME MIGRATION
+        # -----------------------------------------
 
+        resume_selected = any(
+
+            (
+                m.get("source_table")
+                == "resume"
+            )
+
+            and
+
+            (
+                m.get("destination_table")
+                == "credentials_resume"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # RECOMMENDATION LETTER MIGRATION
+        # -----------------------------------------
+
+        recommendation_letter_selected = any(
+
+            (
+                m.get("source_table")
+                == "recommendation_request"
+            )
+
+            and
+
+            (
+                m.get("destination_table")
+                == "credentials_recommendation_letters"
+            )
+
+            for m in mappings
+        )
         # -----------------------------------------
         # Logs
         # -----------------------------------------
@@ -480,7 +516,16 @@ class GLLMigrationEngine:
             f"digital_badges_selected="
             f"{digital_badges_selected}"
         )
-
+        
+        logger.info(
+            f"resume_selected="
+            f"{resume_selected}"
+        )
+        
+        logger.info(
+            f"recommendation_letter_selected="
+            f"{recommendation_letter_selected}"
+        )
         # -----------------------------------------
         # Add UsersMigrator
         # -----------------------------------------
@@ -662,7 +707,58 @@ class GLLMigrationEngine:
                     self.config
                 )
             )
+            
+            # -----------------------------------------
+            # Add ResumeMigrator
+            # -----------------------------------------
 
+        if resume_selected:
+
+                logger.info(
+                    "Adding ResumeMigrator"
+                )
+
+                migrators.append(
+
+                    ResumeMigrator(
+
+                        self,
+
+                        self.source_engine,
+
+                        self.dest_engine,
+
+                        self.storage,
+
+                        self.config
+                    )
+                )
+
+            # -----------------------------------------
+        # Add RecommendationLetterMigrator
+        # -----------------------------------------
+
+        if recommendation_letter_selected:
+
+            logger.info(
+                "Adding RecommendationLetterMigrator"
+            )
+
+            migrators.append(
+
+                RecommendationLetterMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
         # -----------------------------------------
         # No Migrators
         # -----------------------------------------
