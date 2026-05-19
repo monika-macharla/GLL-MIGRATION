@@ -247,7 +247,11 @@ async def migrate(request: MigrationRequest):
         is_gll = any(
 
             # destination tables
-            m.destination_table in [
+            (
+                m.destination_table
+                or
+                ""
+            ).strip().lower() in [
 
                 "institutions",
 
@@ -279,7 +283,11 @@ async def migrate(request: MigrationRequest):
             or
 
             # source tables
-            m.source_table in [
+            (
+                m.source_table
+                or
+                ""
+            ).strip().lower() in [
 
                 "institution",
 
@@ -297,6 +305,8 @@ async def migrate(request: MigrationRequest):
                 
                 "resume",
                 
+                "recommendation_letter",
+
                 "recommendation_request",
             ]
 

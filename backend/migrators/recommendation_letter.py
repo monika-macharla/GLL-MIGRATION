@@ -4,7 +4,7 @@ import logging
 from sqlalchemy import (
     select,
     insert,
-    and_
+    inspect
 )
 
 from .base_migrator import BaseMigrator
@@ -78,17 +78,32 @@ class RecommendationLetterMigrator(BaseMigrator):
             self.metadata_source
         )
 
+        recommendation_letter_table = self._manual_reflect(
+            'recommendation_letter',
+            self.source_engine,
+            self.metadata_source
+        )
+
         logger.info(
             f"Recommendation table columns: "
             f"{recommendation_table.columns.keys()}"
+        )
+
+        logger.info(
+            f"Recommendation letter table columns: "
+            f"{recommendation_letter_table.columns.keys()}"
         )
 
         # -------------------------------------------------
         # DESTINATION TABLES
         # -------------------------------------------------
 
+        recommendation_destination_table_name = (
+            self._get_recommendation_destination_table_name()
+        )
+
         recommendation_dest_table = self._manual_reflect(
-            'credentials_recommendation_letters',
+            recommendation_destination_table_name,
             self.dest_engine,
             self.metadata_dest
         )
@@ -114,11 +129,13 @@ class RecommendationLetterMigrator(BaseMigrator):
 
         query = select(
             recommendation_table
-        ).where(
-            and_(
-                recommendation_table.c.user_id == 501
+        )
+
+        if self.config.get('limit'):
+
+            query = query.limit(
+                self.config['limit']
             )
-        ).limit(100)
 
         with self.source_engine.connect() as source_conn:
 
@@ -225,6 +242,55 @@ class RecommendationLetterMigrator(BaseMigrator):
 
                         continue
 
+                    source_gl_student = (
+                        self.fetch_one_by_column(
+
+                            self.source_engine,
+
+                            "gl_student",
+
+                            "user_id",
+
+                            source_gl_user_id
+                        )
+                    )
+
+                    source_student_id = None
+
+                    student_number = None
+
+                    student_first_name = None
+
+                    student_last_name = None
+
+                    student_date_of_birth = None
+
+                    if source_gl_student:
+
+                        source_student_id = (
+                            source_gl_student.get("id")
+                        )
+
+                        student_number = (
+                            source_gl_student.get("school_student_id")
+                            or
+                            source_gl_student.get("student_number")
+                            or
+                            source_student_id
+                        )
+
+                        student_first_name = (
+                            source_gl_student.get("first_name")
+                        )
+
+                        student_last_name = (
+                            source_gl_student.get("last_name")
+                        )
+
+                        student_date_of_birth = (
+                            source_gl_student.get("date_of_birth")
+                        )
+
                     # -------------------------------------------------
                     # FETCH DESTINATION USER
                     # -------------------------------------------------
@@ -309,6 +375,27 @@ class RecommendationLetterMigrator(BaseMigrator):
 
                         continue
 
+                    institution_row = (
+                        self.fetch_one_by_column(
+
+                            auth_db_engine,
+
+                            "institutions",
+
+                            "uuid",
+
+                            institution_uuid
+                        )
+                    )
+
+                    institution_name = None
+
+                    if institution_row:
+
+                        institution_name = (
+                            institution_row.get("name")
+                        )
+
                     # -------------------------------------------------
                     # DATE MAPPING
                     # -------------------------------------------------
@@ -322,21 +409,157 @@ class RecommendationLetterMigrator(BaseMigrator):
                         f"{created_at}"
                     )
 
+                    updated_at = (
+                        row_dict.get(
+                            recommendation_table.c.date_issued
+                        )
+                        or
+                        row_dict.get(
+                            recommendation_table.c.date_of_initial_response
+                        )
+                        or
+                        created_at
+                    )
+
+                    due_date_to_recommender = (
+                        row_dict.get(
+                            recommendation_table.c.issued_by_date
+                        )
+                    )
+
                     # -------------------------------------------------
-                    # FULL NAME
+                    # SOURCE LETTER DETAILS
                     # -------------------------------------------------
 
-                    first_name = row_dict.get(
-                        recommendation_table.c.first_name
-                    ) or ""
+                    source_request_id = row_dict.get(
+                        recommendation_table.c.id
+                    )
 
-                    last_name = row_dict.get(
-                        recommendation_table.c.last_name
-                    ) or ""
+                    source_letter = (
+                        self.fetch_one_by_column(
 
-                    recommender_full_name = (
-                        f"{first_name} {last_name}"
-                    ).strip()
+                            self.source_engine,
+
+                            "recommendation_letter",
+
+                            "reference_id",
+
+                            source_request_id
+                        )
+                    )
+
+                    issuer_first_name = ""
+
+                    issuer_middle_name = ""
+
+                    issuer_last_name = ""
+
+                    recommender_email = (
+                        row_dict.get(
+                            recommendation_table.c.recommender_email
+                        )
+                        or
+                        ""
+                    )
+
+                    upload_letter = None
+
+                    blockchain_hash = None
+
+                    if source_letter:
+
+                        issuer_first_name = (
+                            source_letter.get("issuer_first_name")
+                            or
+                            ""
+                        )
+
+                        issuer_middle_name = (
+                            source_letter.get("issuer_middle_name")
+                            or
+                            ""
+                        )
+
+                        issuer_last_name = (
+                            source_letter.get("issuer_last_name")
+                            or
+                            ""
+                        )
+
+                        recommender_email = (
+                            source_letter.get("issuer_email")
+                            or
+                            recommender_email
+                        )
+
+                        source_letter_id = (
+                            source_letter.get("id")
+                        )
+
+                        if source_letter_id:
+
+                            upload_letter = (
+                                f"recommendationletter/"
+                                f"{source_letter_id}/"
+                                f"file"
+                            )
+
+                        else:
+
+                            upload_letter = (
+                                source_letter.get(
+                                    "pdf_letter_s3_link"
+                                )
+                            )
+
+                        blockchain_hash = (
+                            source_letter.get("blockchain_hash")
+                        )
+
+                    request_first_name = (
+                        row_dict.get(
+                            recommendation_table.c.first_name
+                        )
+                        or
+                        ""
+                    )
+
+                    request_middle_name = (
+                        row_dict.get(
+                            recommendation_table.c.middle_name
+                        )
+                        or
+                        ""
+                    )
+
+                    request_last_name = (
+                        row_dict.get(
+                            recommendation_table.c.last_name
+                        )
+                        or
+                        ""
+                    )
+
+                    issuer_full_name = self._join_name(
+                        issuer_first_name,
+                        issuer_middle_name,
+                        issuer_last_name
+                    )
+
+                    logger.info(
+                        f"Issuer full name: "
+                        f"{issuer_full_name}"
+                    )
+
+                    recommender_full_name = issuer_full_name
+
+                    if not recommender_full_name:
+
+                        recommender_full_name = self._join_name(
+                            request_first_name,
+                            request_middle_name,
+                            request_last_name
+                        )
 
                     logger.info(
                         f"Recommender Full Name: "
@@ -351,22 +574,30 @@ class RecommendationLetterMigrator(BaseMigrator):
                         ""
                     )
 
-                    source_enrollment = (
-                        self.fetch_one_by_column(
+                    source_enrollment = None
 
-                            auth_db_engine,
+                    if source_student_id:
 
-                            "user_enrollments",
+                        source_enrollment = (
+                            self.fetch_one_by_column(
 
-                            "student_number",
+                                self.source_engine,
 
-                            str(source_gl_user_id)
+                                "enrollment",
+
+                                "student_id",
+
+                                source_student_id
+                            )
                         )
-                    )
 
                     if source_enrollment:
 
                         fetched_enrollment_code = (
+                            source_enrollment.get(
+                                "enrollment_UUID"
+                            )
+                            or
                             source_enrollment.get(
                                 "enrollment_code"
                             )
@@ -377,6 +608,39 @@ class RecommendationLetterMigrator(BaseMigrator):
                             enrollment_code = (
                                 fetched_enrollment_code
                             )
+
+                    if not enrollment_code:
+
+                        destination_enrollment = (
+                            self.fetch_one_by_column(
+
+                                auth_db_engine,
+
+                                "user_enrollments",
+
+                                "user_uuid",
+
+                                destination_user_uuid
+                            )
+                        )
+
+                        if destination_enrollment:
+
+                            enrollment_code = (
+                                destination_enrollment.get(
+                                    "enrollment_code"
+                                )
+                                or
+                                ""
+                            )
+
+                            if not student_number:
+
+                                student_number = (
+                                    destination_enrollment.get(
+                                        "student_number"
+                                    )
+                                )
 
                     logger.info(
                         f"Enrollment code: "
@@ -391,6 +655,31 @@ class RecommendationLetterMigrator(BaseMigrator):
                         uuid.uuid4()
                     )
 
+                    credential_path = upload_letter
+
+                    upload_letter_file_name = (
+                        self._extract_file_name(
+                            upload_letter
+                        )
+                    )
+
+                    request_status = row_dict.get(
+                        recommendation_table.c.request_status
+                    )
+
+                    status = self._map_status(
+                        request_status
+                    )
+
+                    is_confidential = (
+                        1
+                        if row_dict.get(
+                            recommendation_table.c.blind_recommendation_letter
+                        )
+                        else
+                        0
+                    )
+
                     # -------------------------------------------------
                     # credentials_recommendation_letters
                     # -------------------------------------------------
@@ -401,7 +690,7 @@ class RecommendationLetterMigrator(BaseMigrator):
 
                         'created_at': created_at,
 
-                        'updated_at': created_at,
+                        'updated_at': updated_at,
 
                         'deleted_at': None,
 
@@ -409,10 +698,10 @@ class RecommendationLetterMigrator(BaseMigrator):
                             recommender_full_name
                         ),
 
-                        'is_confidential': 1,
+                        'is_confidential': is_confidential,
 
                         'due_date_to_recommender': (
-                            ''
+                            due_date_to_recommender
                         ),
 
                         'recommendation_type': 1,
@@ -420,9 +709,7 @@ class RecommendationLetterMigrator(BaseMigrator):
                         'recommendation_input_type': 1,
 
                         'recommendation_input': (
-                            row_dict.get(
-                                recommendation_table.c.request_status
-                            )
+                            request_status
                         ),
 
                         'message_to_recommender': (
@@ -435,11 +722,17 @@ class RecommendationLetterMigrator(BaseMigrator):
 
                         'supporting_materials_file_name': None,
 
-                        'upload_letter': None,
+                        'upload_letter': upload_letter,
 
-                        'upload_letter_file_name': None,
+                        'upload_letter_file_name': (
+                            upload_letter_file_name
+                        ),
 
-                        'description': None,
+                        'description': (
+                            row_dict.get(
+                                recommendation_table.c.request_status_reason
+                            )
+                        ),
 
                         'user_id': (
                             destination_user_uuid
@@ -449,28 +742,22 @@ class RecommendationLetterMigrator(BaseMigrator):
                             institution_uuid
                         ),
 
-                       'recommender_email': (
-                            row_dict.get(
-                                recommendation_table.c.recommender_email
-                            )
-
-                            or
-
-                            ''
+                        'recommender_email': (
+                            recommender_email
                         ),
 
                         'credential_type': 4,
 
-                        'status': 3,
+                        'status': status,
 
-                        'credential_path': None,
+                        'credential_path': credential_path,
 
                         'created_by': (
-                            ''
+                            destination_user_uuid
                         ),
 
                         'updated_by': (
-                            ''
+                            destination_user_uuid
                         ),
 
                         'deleted_by': None,
@@ -503,7 +790,7 @@ class RecommendationLetterMigrator(BaseMigrator):
 
                         'created_at': created_at,
 
-                        'updated_at': created_at,
+                        'updated_at': updated_at,
 
                         'deleted_at': None,
 
@@ -515,38 +802,117 @@ class RecommendationLetterMigrator(BaseMigrator):
                             institution_uuid
                         ),
 
+                        'student_user_name': (
+                            source_username
+                        ),
+
+                        'institution_name': (
+                            institution_name
+                        ),
+
+                        'student_id': (
+                            str(student_number)
+                            if student_number is not None
+                            else None
+                        ),
+
+                        'student_email': (
+                            source_username
+                        ),
+
+                        'credential_claim_status': 0,
+
                         'credential_type': 4,
 
-                        'status': 3,
+                        'status': status,
 
                         'recommendation_letters': (
                             recommendation_uuid
                         ),
 
-                        'credential_path': None,
+                        'credential_path': credential_path,
 
                         'enrollment_code': (
                             enrollment_code
                         ),
 
                         'created_by': (
-                            ''
+                            destination_user_uuid
                         ),
 
                         'updated_by': (
-                            ''
+                            destination_user_uuid
                         ),
 
                         'deleted_by': None,
 
                         'issued_on': str(
-                            created_at
+                            (
+                                row_dict.get(
+                                    recommendation_table.c.date_issued
+                                )
+                                or
+                                created_at
+                            )
                         ),
 
                         'generated_on': None,
                         
                         'is_registered': 1,
                     }
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "student_first_name",
+                        student_first_name
+                    )
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "student_last_name",
+                        student_last_name
+                    )
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "dateofbirth",
+                        student_date_of_birth
+                    )
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "date_of_birth",
+                        student_date_of_birth
+                    )
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "student_number",
+                        (
+                            str(student_number)
+                            if student_number is not None
+                            else None
+                        )
+                    )
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "enrollmentcode",
+                        enrollment_code
+                    )
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "blockchain_hash",
+                        blockchain_hash
+                    )
 
                     logger.info(
                         f"Credentials row: "
@@ -635,3 +1001,134 @@ class RecommendationLetterMigrator(BaseMigrator):
             )
 
             return 0
+
+    # -------------------------------------------------
+    # HELPERS
+    # -------------------------------------------------
+
+    def _set_if_column(
+        self,
+        row: dict,
+        table,
+        column_name: str,
+        value
+    ) -> None:
+
+        if column_name in table.c:
+
+            row[column_name] = value
+
+    def _get_recommendation_destination_table_name(
+        self
+    ) -> str:
+
+        inspector = inspect(
+            self.dest_engine
+        )
+
+        table_names = set(
+            inspector.get_table_names()
+        )
+
+        candidate_tables = [
+            "credentials_recommendation_letters"
+        ]
+
+        for mapping in self.config.get(
+            "mappings",
+            []
+        ):
+
+            destination_table = (
+                mapping.get(
+                    "destination_table"
+                )
+                or
+                ""
+            ).strip()
+
+            if (
+                destination_table
+                in candidate_tables
+                and
+                destination_table in table_names
+            ):
+
+                return destination_table
+
+        for candidate_table in candidate_tables:
+
+            if candidate_table in table_names:
+
+                logger.info(
+                    "Using recommendation destination table: "
+                    f"{candidate_table}"
+                )
+
+                return candidate_table
+
+        recommendation_tables = sorted(
+            table_name
+            for table_name in table_names
+            if "recommendation" in table_name.lower()
+        )
+
+        raise ValueError(
+            "Recommendation destination table not found. "
+            "Expected one of: "
+            f"{candidate_tables}. "
+            "Available recommendation tables: "
+            f"{recommendation_tables}"
+        )
+
+    def _is_recommendation_destination_table(
+        self,
+        table_name: str
+    ) -> bool:
+
+        return (
+            table_name or ""
+        ).strip().lower() in [
+            "credentials_recommendation_letters"
+        ]
+
+    def _join_name(
+        self,
+        *parts
+    ) -> str:
+
+        return " ".join(
+            str(part).strip()
+            for part in parts
+            if part
+            and
+            str(part).strip()
+        )
+
+    def _extract_file_name(
+        self,
+        file_path
+    ):
+
+        if not file_path:
+
+            return None
+
+        return str(file_path).rstrip("/").split("/")[-1]
+
+    def _map_status(
+        self,
+        request_status
+    ) -> int:
+
+        normalized_status = (
+            str(request_status or "")
+            .strip()
+            .lower()
+        )
+
+        if normalized_status == "issued":
+
+            return 3
+
+        return 1

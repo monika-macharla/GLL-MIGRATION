@@ -465,14 +465,21 @@ class GLLMigrationEngine:
         recommendation_letter_selected = any(
 
             (
-                m.get("source_table")
-                == "recommendation_request"
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "recommendation_request",
+                    "recommendation_letter"
+                ]
             )
 
-            and
+            or
 
             (
-                m.get("destination_table")
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
                 == "credentials_recommendation_letters"
             )
 
