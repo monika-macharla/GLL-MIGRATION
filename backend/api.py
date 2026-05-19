@@ -276,6 +276,10 @@ async def migrate(request: MigrationRequest):
                 "credentials_resume",
                 
                 "credentials_all",
+
+                "credentials_self_uploads",
+
+                "credentials_transcripts",
                 
                 "credentials_recommendation_letters"
             ]
@@ -304,6 +308,10 @@ async def migrate(request: MigrationRequest):
                 "badge",
                 
                 "resume",
+
+                "other_credentials",
+
+                "transcript",
                 
                 "recommendation_letter",
 

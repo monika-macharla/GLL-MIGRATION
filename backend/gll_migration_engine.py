@@ -27,7 +27,11 @@ from migrators import (
     
     ResumeMigrator,
     
-    RecommendationLetterMigrator
+    RecommendationLetterMigrator,
+
+    SelfUploadMigrator,
+
+    TranscriptMigrator
 
 )
 
@@ -459,6 +463,56 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # SELF UPLOAD MIGRATION
+        # -----------------------------------------
+
+        self_upload_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "other_credentials"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "credentials_self_uploads"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # TRANSCRIPT MIGRATION
+        # -----------------------------------------
+
+        transcript_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "transcript"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "credentials_transcripts"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # RECOMMENDATION LETTER MIGRATION
         # -----------------------------------------
 
@@ -527,6 +581,16 @@ class GLLMigrationEngine:
         logger.info(
             f"resume_selected="
             f"{resume_selected}"
+        )
+
+        logger.info(
+            f"self_upload_selected="
+            f"{self_upload_selected}"
+        )
+
+        logger.info(
+            f"transcript_selected="
+            f"{transcript_selected}"
         )
         
         logger.info(
@@ -741,7 +805,59 @@ class GLLMigrationEngine:
                     )
                 )
 
-            # -----------------------------------------
+        # -----------------------------------------
+        # Add SelfUploadMigrator
+        # -----------------------------------------
+
+        if self_upload_selected:
+
+            logger.info(
+                "Adding SelfUploadMigrator"
+            )
+
+            migrators.append(
+
+                SelfUploadMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add TranscriptMigrator
+        # -----------------------------------------
+
+        if transcript_selected:
+
+            logger.info(
+                "Adding TranscriptMigrator"
+            )
+
+            migrators.append(
+
+                TranscriptMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
         # Add RecommendationLetterMigrator
         # -----------------------------------------
 
