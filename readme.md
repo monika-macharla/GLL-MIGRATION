@@ -18,9 +18,11 @@ enrollment                          user_enrollments(gllauthservicemigration)
 badge                               credentials_digital_badges,(gllreports)(suppport gllauthservicemigration)
                                     credentials_digital_badge_in
 resume                                                          credentials_resume, credentials_all (already code is there)
-recommendation_letter,recommendation_letter_request             credentials_recommendation_letter. credentials_all(need to write a code)
+recommendation_letter,recommendation_letter_request             credentials_recommendation_letters. credentials_all(need to write a code)
 
-
+other-credentials                    self-uploads, credentials_all
+transcript                           credentials_transcript, credentials_all
+certificate                          credentials_cerificate, credentials_all
 
 
 
