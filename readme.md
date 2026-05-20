@@ -22,6 +22,7 @@ student_preference                 my_preferences
 
 ferpa                             ferpa
 
+nsapi_criteria                    scholarship_prefernces
 
 
 2. gllreports
