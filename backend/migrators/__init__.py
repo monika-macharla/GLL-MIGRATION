@@ -15,6 +15,7 @@ from .certificate_migrator import CertificateMigrator
 from .credentials_shared_migrator import CredentialsSharedMigrator
 from .registrars_migrator import RegistrarsMigrator
 from .preferences_migrator import PreferencesMigrator
+from .ferpa_migrator import FerpaMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator']

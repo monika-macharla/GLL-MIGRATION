@@ -39,7 +39,9 @@ from migrators import (
 
     RegistrarsMigrator,
 
-    PreferencesMigrator
+    PreferencesMigrator,
+
+    FerpaMigrator
 
 )
 
@@ -666,6 +668,31 @@ class GLLMigrationEngine:
 
             for m in mappings
         )
+
+        # -----------------------------------------
+        # FERPA MIGRATION
+        # -----------------------------------------
+
+        ferpa_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "ferpa"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "ferpa"
+            )
+
+            for m in mappings
+        )
         # -----------------------------------------
         # Logs
         # -----------------------------------------
@@ -743,6 +770,11 @@ class GLLMigrationEngine:
         logger.info(
             f"preferences_selected="
             f"{preferences_selected}"
+        )
+
+        logger.info(
+            f"ferpa_selected="
+            f"{ferpa_selected}"
         )
         # -----------------------------------------
         # Add UsersMigrator
@@ -1121,6 +1153,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 PreferencesMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add FerpaMigrator
+        # -----------------------------------------
+
+        if ferpa_selected:
+
+            logger.info(
+                "Adding FerpaMigrator"
+            )
+
+            migrators.append(
+
+                FerpaMigrator(
 
                     self,
 

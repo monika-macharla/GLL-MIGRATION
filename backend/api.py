@@ -295,7 +295,9 @@ async def migrate(request: MigrationRequest):
 
                 "registrars",
 
-                "my_preferences"
+                "my_preferences",
+
+                "ferpa"
             ]
 
             or
@@ -354,6 +356,8 @@ async def migrate(request: MigrationRequest):
                 "institution_registrars",
 
                 "student_preference",
+
+                "ferpa",
             ]
 
             for m in request.mappings
