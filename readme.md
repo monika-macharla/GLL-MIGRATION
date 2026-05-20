@@ -7,7 +7,7 @@ institutions                        institutions,campuses(gllauthservicemigratio
 
 gl_user                             users,user_role,user_profile(gllauthservicemigration)
 
-<!-- gl_student                          users,user_role,user_profile(gllauthservicemigration) -->
+<!-- gl_student                          users,user_role,user_profile(gllauthservicemigration) -->(not needed)
 
 institution_user                    user_institution(gllauthservicemigration)
 
@@ -17,6 +17,8 @@ enrollment                          user_enrollments(gllauthservicemigration)
 
 
 institution_registrar              registrars
+
+student_preference                 my_preferences
 
 
 
