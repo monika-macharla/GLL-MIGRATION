@@ -37,7 +37,9 @@ from migrators import (
 
     CredentialsSharedMigrator,
 
-    RegistrarsMigrator
+    RegistrarsMigrator,
+
+    PreferencesMigrator
 
 )
 
@@ -639,6 +641,31 @@ class GLLMigrationEngine:
 
             for m in mappings
         )
+
+        # -----------------------------------------
+        # PREFERENCES MIGRATION
+        # -----------------------------------------
+
+        preferences_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "student_preference"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "my_preferences"
+            )
+
+            for m in mappings
+        )
         # -----------------------------------------
         # Logs
         # -----------------------------------------
@@ -711,6 +738,11 @@ class GLLMigrationEngine:
         logger.info(
             f"registrars_selected="
             f"{registrars_selected}"
+        )
+
+        logger.info(
+            f"preferences_selected="
+            f"{preferences_selected}"
         )
         # -----------------------------------------
         # Add UsersMigrator
@@ -1063,6 +1095,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 RegistrarsMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add PreferencesMigrator
+        # -----------------------------------------
+
+        if preferences_selected:
+
+            logger.info(
+                "Adding PreferencesMigrator"
+            )
+
+            migrators.append(
+
+                PreferencesMigrator(
 
                     self,
 

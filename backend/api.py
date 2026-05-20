@@ -293,7 +293,9 @@ async def migrate(request: MigrationRequest):
 
                 "student_credentials_share_history",
 
-                "registrars"
+                "registrars",
+
+                "my_preferences"
             ]
 
             or
@@ -350,6 +352,8 @@ async def migrate(request: MigrationRequest):
                 "institution_registrar",
 
                 "institution_registrars",
+
+                "student_preference",
             ]
 
             for m in request.mappings

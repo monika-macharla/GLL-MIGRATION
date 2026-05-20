@@ -14,6 +14,7 @@ from .transcript_migrator import TranscriptMigrator
 from .certificate_migrator import CertificateMigrator
 from .credentials_shared_migrator import CredentialsSharedMigrator
 from .registrars_migrator import RegistrarsMigrator
+from .preferences_migrator import PreferencesMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator']
