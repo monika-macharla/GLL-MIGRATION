@@ -12,6 +12,8 @@ from .recommendation_letter import RecommendationLetterMigrator
 from .self_upload_migrator import SelfUploadMigrator
 from .transcript_migrator import TranscriptMigrator
 from .certificate_migrator import CertificateMigrator
+from .credentials_shared_migrator import CredentialsSharedMigrator
+from .registrars_migrator import RegistrarsMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator']

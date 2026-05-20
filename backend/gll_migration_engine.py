@@ -33,7 +33,11 @@ from migrators import (
 
     TranscriptMigrator,
 
-    CertificateMigrator
+    CertificateMigrator,
+
+    CredentialsSharedMigrator,
+
+    RegistrarsMigrator
 
 )
 
@@ -570,6 +574,71 @@ class GLLMigrationEngine:
 
             for m in mappings
         )
+
+        # -----------------------------------------
+        # CREDENTIALS SHARED MIGRATION
+        # -----------------------------------------
+
+        credentials_shared_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "badge_shared",
+                    "certificate_shared",
+                    "other_credential_share",
+                    "recommendation_letter_share",
+                    "self_uploaded_transcript_share",
+                    "transcript_shared",
+                    "resume_share"
+                ]
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in [
+                    "credentials_shared",
+                    "student_credentials_share_history"
+                ]
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # REGISTRARS MIGRATION
+        # -----------------------------------------
+
+        registrars_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "institution_registrat",
+                    "institution_registrar",
+                    "institution_registrars"
+                ]
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "registrars"
+            )
+
+            for m in mappings
+        )
         # -----------------------------------------
         # Logs
         # -----------------------------------------
@@ -632,6 +701,16 @@ class GLLMigrationEngine:
         logger.info(
             f"recommendation_letter_selected="
             f"{recommendation_letter_selected}"
+        )
+
+        logger.info(
+            f"credentials_shared_selected="
+            f"{credentials_shared_selected}"
+        )
+
+        logger.info(
+            f"registrars_selected="
+            f"{registrars_selected}"
         )
         # -----------------------------------------
         # Add UsersMigrator
@@ -932,6 +1011,58 @@ class GLLMigrationEngine:
             migrators.append(
 
                 RecommendationLetterMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CredentialsSharedMigrator
+        # -----------------------------------------
+
+        if credentials_shared_selected:
+
+            logger.info(
+                "Adding CredentialsSharedMigrator"
+            )
+
+            migrators.append(
+
+                CredentialsSharedMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add RegistrarsMigrator
+        # -----------------------------------------
+
+        if registrars_selected:
+
+            logger.info(
+                "Adding RegistrarsMigrator"
+            )
+
+            migrators.append(
+
+                RegistrarsMigrator(
 
                     self,
 

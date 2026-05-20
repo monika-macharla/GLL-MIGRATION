@@ -287,7 +287,13 @@ async def migrate(request: MigrationRequest):
 
                 "credentials_cerificate",
 
-                "credentials_certificate"
+                "credentials_certificate",
+
+                "credentials_shared",
+
+                "student_credentials_share_history",
+
+                "registrars"
             ]
 
             or
@@ -324,6 +330,26 @@ async def migrate(request: MigrationRequest):
                 "recommendation_request",
 
                 "certificate",
+
+                "badge_shared",
+
+                "certificate_shared",
+
+                "other_credential_share",
+
+                "recommendation_letter_share",
+
+                "self_uploaded_transcript_share",
+
+                "transcript_shared",
+
+                "resume_share",
+
+                "institution_registrat",
+
+                "institution_registrar",
+
+                "institution_registrars",
             ]
 
             for m in request.mappings
