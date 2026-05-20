@@ -281,7 +281,13 @@ async def migrate(request: MigrationRequest):
 
                 "credentials_transcripts",
                 
-                "credentials_recommendation_letters"
+                "credentials_recommendation_letters",
+
+                "credentials_certifications",
+
+                "credentials_cerificate",
+
+                "credentials_certificate"
             ]
 
             or
@@ -316,6 +322,8 @@ async def migrate(request: MigrationRequest):
                 "recommendation_letter",
 
                 "recommendation_request",
+
+                "certificate",
             ]
 
             for m in request.mappings

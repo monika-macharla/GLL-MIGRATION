@@ -31,7 +31,9 @@ from migrators import (
 
     SelfUploadMigrator,
 
-    TranscriptMigrator
+    TranscriptMigrator,
+
+    CertificateMigrator
 
 )
 
@@ -513,6 +515,35 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # CERTIFICATE MIGRATION
+        # -----------------------------------------
+
+        certificate_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "certificate"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in [
+                    "credentials_certifications",
+                    "credentials_cerificate",
+                    "credentials_certificate"
+                ]
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # RECOMMENDATION LETTER MIGRATION
         # -----------------------------------------
 
@@ -591,6 +622,11 @@ class GLLMigrationEngine:
         logger.info(
             f"transcript_selected="
             f"{transcript_selected}"
+        )
+
+        logger.info(
+            f"certificate_selected="
+            f"{certificate_selected}"
         )
         
         logger.info(
@@ -844,6 +880,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 TranscriptMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CertificateMigrator
+        # -----------------------------------------
+
+        if certificate_selected:
+
+            logger.info(
+                "Adding CertificateMigrator"
+            )
+
+            migrators.append(
+
+                CertificateMigrator(
 
                     self,
 

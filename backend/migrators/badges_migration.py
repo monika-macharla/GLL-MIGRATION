@@ -130,7 +130,13 @@ class DigitalBadgesMigrator(BaseMigrator):
 
         query = select(
             badge_table
-        ).limit(100)
+        )
+
+        if self.config.get("limit"):
+
+            query = query.limit(
+                self.config["limit"]
+            )
 
         with self.source_engine.connect() as source_conn:
 
@@ -176,22 +182,30 @@ class DigitalBadgesMigrator(BaseMigrator):
                     row_dict = row._mapping
 
                     # -------------------------------------------------
-                    # SOURCE STUDENT ID
+                    # SOURCE USER / STUDENT IDS
                     # -------------------------------------------------
+
+                    source_gl_user_id = self._get_source_value(
+                        row_dict,
+                        badge_table,
+                        "user_id"
+                    )
 
                     source_student_id = row_dict.get(
                         badge_table.c.student_id
-                    )
+                    ) if "student_id" in badge_table.c else None
 
                     logger.info(
+                        f"Source user_id: "
+                        f"{source_gl_user_id}, "
                         f"Source student_id: "
                         f"{source_student_id}"
                     )
 
-                    if not source_student_id:
+                    if not source_gl_user_id and not source_student_id:
 
                         logger.warning(
-                            "student_id is null"
+                            "user_id and student_id are null"
                         )
 
                         continue
@@ -200,20 +214,24 @@ class DigitalBadgesMigrator(BaseMigrator):
                     # FETCH gl_student
                     # -------------------------------------------------
 
-                    source_gl_student = (
-                        self.fetch_one_by_column(
+                    source_gl_student = None
 
-                            self.source_engine,
+                    if source_student_id:
 
-                            "gl_student",
+                        source_gl_student = (
+                            self.fetch_one_by_column(
 
-                            "id",
+                                self.source_engine,
 
-                            source_student_id
+                                "gl_student",
+
+                                "id",
+
+                                source_student_id
+                            )
                         )
-                    )
 
-                    if not source_gl_student:
+                    if source_student_id and not source_gl_student:
 
                         logger.warning(
                             f"No gl_student found "
@@ -223,15 +241,13 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                         continue
 
-                    # -------------------------------------------------
-                    # GET gl_user.id
-                    # -------------------------------------------------
+                    if source_gl_student and not source_gl_user_id:
 
-                    source_gl_user_id = (
-                        source_gl_student.get(
-                            "user_id"
+                        source_gl_user_id = (
+                            source_gl_student.get(
+                                "user_id"
+                            )
                         )
-                    )
 
                     logger.info(
                         f"gl_user.id: "
@@ -295,6 +311,29 @@ class DigitalBadgesMigrator(BaseMigrator):
                         )
 
                         continue
+
+                    if not source_gl_student:
+
+                        source_gl_student = (
+                            self.fetch_one_by_column(
+
+                                self.source_engine,
+
+                                "gl_student",
+
+                                "user_id",
+
+                                source_gl_user_id
+                            )
+                        )
+
+                        if source_gl_student and not source_student_id:
+
+                            source_student_id = (
+                                source_gl_student.get(
+                                    "id"
+                                )
+                            )
 
                     # -------------------------------------------------
                     # FETCH DEST USERS TABLE
@@ -528,22 +567,30 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                     enrollment_code = None
 
-                    source_enrollment = (
-                        self.fetch_one_by_column(
+                    source_enrollment = None
 
-                            self.source_engine,
+                    if source_student_id:
 
-                            "enrollment",
+                        source_enrollment = (
+                            self.fetch_one_by_column(
 
-                            "id",
+                                self.source_engine,
 
-                            source_student_id
+                                "enrollment",
+
+                                "student_id",
+
+                                source_student_id
+                            )
                         )
-                    )
 
                     if source_enrollment:
 
                         source_enrollment_code = (
+                            source_enrollment.get(
+                                "enrollment_UUID"
+                            )
+                            or
                             source_enrollment.get(
                                 "enrollment_code"
                             )
@@ -563,12 +610,43 @@ class DigitalBadgesMigrator(BaseMigrator):
                         f"{enrollment_code}"
                     )
 
+                    if not enrollment_code:
+
+                        destination_enrollment = (
+                            self.fetch_one_by_column(
+
+                                auth_db_engine,
+
+                                "user_enrollments",
+
+                                "user_uuid",
+
+                                destination_user_uuid
+                            )
+                        )
+
+                        if destination_enrollment:
+
+                            enrollment_code = (
+                                destination_enrollment.get(
+                                    "enrollment_code"
+                                )
+                                or
+                                ""
+                            )
+
+                    if enrollment_code is None:
+
+                        enrollment_code = ""
+
                     # -------------------------------------------------
                     # IMAGE PATH
                     # -------------------------------------------------
 
-                    image_path = row_dict.get(
-                        badge_table.c.image
+                    image_path = self._get_source_value(
+                        row_dict,
+                        badge_table,
+                        "image"
                     )
 
                     # -------------------------------------------------
@@ -595,8 +673,12 @@ class DigitalBadgesMigrator(BaseMigrator):
                     # CREATED DATE
                     # -------------------------------------------------
 
-                    created_at = row_dict.get(
-                        badge_table.c.issued_on
+                    created_at = self._get_source_value(
+                        row_dict,
+                        badge_table,
+                        "issued_on",
+                        "created_at",
+                        "created_date"
                     )
 
                     # -------------------------------------------------
@@ -641,8 +723,10 @@ class DigitalBadgesMigrator(BaseMigrator):
                             file_type,
 
                         'badge_json':
-                            row_dict.get(
-                                badge_table.c.assertion_json
+                            self._get_source_value(
+                                row_dict,
+                                badge_table,
+                                "assertion_json"
                             ),
 
                         'credential_type': 3,
@@ -659,7 +743,10 @@ class DigitalBadgesMigrator(BaseMigrator):
                     )
 
                     insert_data.append(
-                        mapped_row
+                        self._filter_to_table_columns(
+                            mapped_row,
+                            dest_table
+                        )
                     )
 
                     # -------------------------------------------------
@@ -680,22 +767,30 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                         'badgeId': badge_uuid,
 
-                        'badge_name': row_dict.get(
-                            badge_table.c.badge_name
+                        'badge_name': self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "badge_name"
                         ),
 
-                        'badge_description': row_dict.get(
-                            badge_table.c.description
+                        'badge_description': self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "description"
                         ),
 
-                        'earning_criteria': row_dict.get(
-                            badge_table.c.criteria
+                        'earning_criteria': self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "criteria"
                         ),
 
                         'issuer_name': issuer_name,
 
-                        'expires_on': row_dict.get(
-                            badge_table.c.expires
+                        'expires_on': self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "expires"
                         ),
 
                         'badge_image_url': image_path,
@@ -709,7 +804,10 @@ class DigitalBadgesMigrator(BaseMigrator):
                     )
 
                     badge_info_insert_data.append(
-                        badge_info_row
+                        self._filter_to_table_columns(
+                            badge_info_row,
+                            badge_info_table
+                        )
                     )
 
                     # -------------------------------------------------
@@ -736,7 +834,11 @@ class DigitalBadgesMigrator(BaseMigrator):
                             issuer_name,
 
                         'student_id':
-                            str(source_student_id),
+                            (
+                                str(source_student_id)
+                                if source_student_id is not None
+                                else None
+                            ),
 
                         'student_email':
                             source_username,
@@ -779,7 +881,10 @@ class DigitalBadgesMigrator(BaseMigrator):
                     )
 
                     credentials_insert_data.append(
-                        credentials_row
+                        self._filter_to_table_columns(
+                            credentials_row,
+                            credentials_table
+                        )
                     )
 
                 except Exception as e:
@@ -881,6 +986,39 @@ class DigitalBadgesMigrator(BaseMigrator):
     # -------------------------------------------------
     # EXTRACT FILE NAME
     # -------------------------------------------------
+
+    def _get_source_value(
+        self,
+        row,
+        table,
+        *column_names
+    ):
+
+        for column_name in column_names:
+
+            if column_name in table.c:
+
+                value = row.get(
+                    table.c[column_name]
+                )
+
+                if value is not None:
+
+                    return value
+
+        return None
+
+    def _filter_to_table_columns(
+        self,
+        row,
+        table
+    ):
+
+        return {
+            column_name: value
+            for column_name, value in row.items()
+            if column_name in table.c
+        }
 
     def _extract_file_name(
         self,
