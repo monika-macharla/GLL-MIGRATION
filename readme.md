@@ -22,7 +22,7 @@ recommendation_letter,recommendation_letter_request             credentials_reco
 
 other-credentials                    self-uploads, credentials_all
 transcript                           credentials_transcript, credentials_all
-certificate                          credentials_cerificate, credentials_all
+certificate                          credentials_cerifications, credentials_all
 
 
 
