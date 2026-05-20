@@ -297,7 +297,9 @@ async def migrate(request: MigrationRequest):
 
                 "my_preferences",
 
-                "ferpa"
+                "ferpa",
+
+                "scholarship_prefernces"
             ]
 
             or
@@ -358,6 +360,8 @@ async def migrate(request: MigrationRequest):
                 "student_preference",
 
                 "ferpa",
+
+                "nsapi_criteria",
             ]
 
             for m in request.mappings

@@ -41,7 +41,9 @@ from migrators import (
 
     PreferencesMigrator,
 
-    FerpaMigrator
+    FerpaMigrator,
+
+    NsapiPreferencesMigrator
 
 )
 
@@ -693,6 +695,31 @@ class GLLMigrationEngine:
 
             for m in mappings
         )
+
+        # -----------------------------------------
+        # NSAPI PREFERENCES MIGRATION
+        # -----------------------------------------
+
+        nsapi_preferences_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "nsapi_criteria"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "scholarship_prefernces"
+            )
+
+            for m in mappings
+        )
         # -----------------------------------------
         # Logs
         # -----------------------------------------
@@ -775,6 +802,11 @@ class GLLMigrationEngine:
         logger.info(
             f"ferpa_selected="
             f"{ferpa_selected}"
+        )
+
+        logger.info(
+            f"nsapi_preferences_selected="
+            f"{nsapi_preferences_selected}"
         )
         # -----------------------------------------
         # Add UsersMigrator
@@ -1179,6 +1211,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 FerpaMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add NsapiPreferencesMigrator
+        # -----------------------------------------
+
+        if nsapi_preferences_selected:
+
+            logger.info(
+                "Adding NsapiPreferencesMigrator"
+            )
+
+            migrators.append(
+
+                NsapiPreferencesMigrator(
 
                     self,
 
