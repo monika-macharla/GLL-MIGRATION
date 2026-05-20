@@ -38,7 +38,7 @@ class InstitutionMigrator(BaseMigrator):
             raise ValueError("Destination table 'institutions' not found.")
 
         # Build join query and filter by parent_id and allowed types
-        allowed_types = ['university', 'employer', 'school', 'service provider', 'regional service provider']
+        allowed_types = ['university', 'employer', 'parentuniversity', 'serviceprovider', 'regionalServiceProvider']
         query = select(institution_table, address_table, state_table, country_table).select_from(
             institution_table
             .join(address_table, institution_table.c.address_id == address_table.c.id, isouter=True)
@@ -181,7 +181,7 @@ class InstitutionMigrator(BaseMigrator):
         mapping = {
             'university': 1,
             'employer': 2,
-            'School': 1,
+            'parentuniversity': 3,
             'serviceprovider': 4,
             'regionalServiceProvider': 5,
         }
