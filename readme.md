@@ -20,6 +20,8 @@ institution_registrar              registrars
 
 student_preference                 my_preferences
 
+ferpa                             ferpa
+
 
 
 2. gllreports
