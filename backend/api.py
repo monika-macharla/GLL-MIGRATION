@@ -622,27 +622,36 @@ async def get_schema(config: DBConfig):
 
             create_engine,
 
-            MetaData
+            inspect
         )
 
         url = get_url(config)
 
         engine = create_engine(url)
 
-        metadata = MetaData()
-
-        metadata.reflect(bind=engine)
+        inspector = inspect(engine)
 
         schema = {}
 
-        for table_name, table in metadata.tables.items():
+        for table_name in inspector.get_table_names():
 
-            schema[table_name] = [
+            try:
 
-                column.name
+                schema[table_name] = [
 
-                for column in table.columns
-            ]
+                    column["name"]
+
+                    for column in inspector.get_columns(
+                        table_name
+                    )
+                ]
+
+            except Exception as table_error:
+
+                logger.warning(
+                    f"Failed to fetch columns for "
+                    f"{table_name}: {table_error}"
+                )
 
         return {
 

@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 class DigitalBadgesMigrator(BaseMigrator):
 
+    BADGE_S3_BUCKET = "greenlightlocker-com"
+
+    BADGE_S3_REGION = "us-west-2"
+
     def __init__(
         self,
         engine,
@@ -180,6 +184,12 @@ class DigitalBadgesMigrator(BaseMigrator):
                     )
 
                     row_dict = row._mapping
+
+                    source_badge_id = self._get_source_value(
+                        row_dict,
+                        badge_table,
+                        "id"
+                    )
 
                     # -------------------------------------------------
                     # SOURCE USER / STUDENT IDS
@@ -649,6 +659,14 @@ class DigitalBadgesMigrator(BaseMigrator):
                         "image"
                     )
 
+                    pdf_path = self._build_badge_s3_url(
+                        (
+                            f"badges/"
+                            f"{source_badge_id}/"
+                            f"pdf_badge"
+                        )
+                    )
+
                     # -------------------------------------------------
                     # FILE NAME
                     # -------------------------------------------------
@@ -795,7 +813,7 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                         'badge_image_url': image_path,
 
-                        'pdf_path': None,
+                        'pdf_path': pdf_path,
                     }
 
                     logger.info(
@@ -854,7 +872,7 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                         'credential_type': 3,
 
-                        'credential_path': None,
+                        'credential_path': pdf_path,
 
                         'enrollment_code':
                             enrollment_code,
@@ -1019,6 +1037,23 @@ class DigitalBadgesMigrator(BaseMigrator):
             for column_name, value in row.items()
             if column_name in table.c
         }
+
+    # -------------------------------------------------
+    # BUILD BADGE S3 URL
+    # -------------------------------------------------
+
+    def _build_badge_s3_url(
+        self,
+        key: str
+    ) -> str:
+
+        clean_key = str(key).lstrip("/")
+
+        return (
+            f"https://{self.BADGE_S3_BUCKET}"
+            f".s3.{self.BADGE_S3_REGION}"
+            f".amazonaws.com/{clean_key}"
+        )
 
     def _extract_file_name(
         self,

@@ -3,39 +3,41 @@
 ```
 source db:                          destination db
 
-institutions                        institutions,campuses(gllauthservicemigration)
+1. insert roles
 
-gl_user                             users,user_role,user_profile(gllauthservicemigration)
+2. institution                         institutions,campuses(gllauthservicemigration)
+
+3. gl_user                             users,user_role,user_profile(gllauthservicemigration)
 
 <!-- gl_student                          users,user_role,user_profile(gllauthservicemigration) -->(not needed)
 
-institution_user                    user_institution(gllauthservicemigration)
+4. institution_user                    user_institution(gllauthservicemigration)
 
-jhi_user                            user_hashed_password(gllauthservicemigration)
+5. jhi_user                            user_hashed_password(gllauthservicemigration)
 
-enrollment                          user_enrollments(gllauthservicemigration)
+6. enrollment                          user_enrollments(gllauthservicemigration)
 
 
-institution_registrar              registrars
+7. institution_registrar              registrars
 
-student_preference                 my_preferences
+8. student_preference                 my_preferences
 
-ferpa                             ferpa
+9. ferpa                             ferpa
 
-nsapi_criteria                    scholarship_prefernces
+10. nsapi_criteria                    scholarship_prefernces
 
 
 2. gllreports
 
-badge                               credentials_digital_badges,(gllreports)(suppport gllauthservicemigration)
-                                    credentials_digital_badge_in
-resume                                                          credentials_resume, credentials_all (already code is there)
-recommendation_letter,recommendation_letter_request             credentials_recommendation_letters. credentials_all(need to write a code)
+11. badge                           credentials_digital_badges,(gllreports)(support gllauthservicemigration)
+                                    credentials_digital_badge_info,credentials_all
+12. resume                                                          credentials_resume, credentials_all
+13. recommendation_letter,recommendation_letter_request             credentials_recommendation_letters. credentials_all
 
-other-credentials                    self-uploads, credentials_all
-transcript                           credentials_transcript, credentials_all
-certificate                          credentials_cerifications, credentials_all
-badge_shared                         credentials_shared
+14. other-credentials                    self-uploads, credentials_all
+15. transcript                           credentials_transcript, credentials_all
+16. certificate                          credentials_cerifications, credentials_all
+17. badge_shared                         credentials_shared,students_credentials_share_history
 
 
 

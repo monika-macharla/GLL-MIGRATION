@@ -35,20 +35,20 @@ interface HistoryLog {
 function App() {
 const [source, setSource] = useState<DBConfig>({
   db_type: 'mysql',
-  host: 'localhost',
+  host: '192.168.2.195',
   port: 3306,
-  username: 'root',
-  password: 'Admin!1',
-  database: 'dcccd'
+  username: 'gllmigration',
+  password: 'G1lmI7rAtI0n@2026',
+  database: 'gll'
 });
 
   const [dest, setDest] = useState<DBConfig>({
     db_type: 'mysql',
-    host: 'localhost',
-    port: 3306,
-    username: 'root',
-    password: 'Admin!1',
-    database: 'gllauthservicemigration'
+    host: '52.14.86.71',
+    port: 3307,
+    username: 'glldev',
+    password: 'G11d4V@6202',
+    database: 'gllauthservicedevmigration'
     // database: 'gllreportsmigration'
   });
 
@@ -56,11 +56,11 @@ const [source, setSource] = useState<DBConfig>({
   {
     name: 'auth_db',
     db_type: 'mysql',
-    host: 'localhost',
-    port: 3306,
-    username: 'root',
-    password: 'Admin!1',
-    database: 'gllauthservicemigration'
+    host: '52.14.86.71',
+    port: 3307,
+    username: 'glldev',
+    password: 'G11d4V@6202',
+    database: 'gllauthservicedevmigration'
   }
 ]);
 

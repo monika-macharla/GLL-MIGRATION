@@ -22,6 +22,8 @@ class CertificateMigrator(BaseMigrator):
     CREDENTIAL_TYPE = 2
     SOURCE_TABLE = "certificate"
     DESTINATION_TABLE = "credentials_certifications"
+    CERTIFICATE_S3_BUCKET = "greenlightlocker-com"
+    CERTIFICATE_S3_REGION = "us-west-2"
     DESTINATION_TABLE_CANDIDATES = [
         "credentials_certifications",
         "credentials_cerificate",
@@ -393,9 +395,13 @@ class CertificateMigrator(BaseMigrator):
                 credential_path = (
                     source_file_value
                     or
-                    f"certificate/"
-                    f"{source_certificate_id or source_gl_user_id}/"
-                    f"credential_data"
+                    self._build_certificate_s3_url(
+                        (
+                            f"certificate/"
+                            f"{source_certificate_id}/"
+                            f"certificate_data"
+                        )
+                    )
                 )
 
                 certificate_uuid = str(
@@ -826,6 +832,19 @@ class CertificateMigrator(BaseMigrator):
             return 1
 
         return 2
+
+    def _build_certificate_s3_url(
+        self,
+        key
+    ):
+
+        clean_key = str(key).lstrip("/")
+
+        return (
+            f"https://{self.CERTIFICATE_S3_BUCKET}"
+            f".s3.{self.CERTIFICATE_S3_REGION}"
+            f".amazonaws.com/{clean_key}"
+        )
 
     def _extract_file_name(
         self,

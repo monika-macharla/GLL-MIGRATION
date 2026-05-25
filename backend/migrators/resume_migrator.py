@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 class ResumeMigrator(BaseMigrator):
 
+    RESUME_S3_BUCKET = "greenlightlocker-com"
+
+    RESUME_S3_REGION = "us-west-2"
+
     def __init__(
         self,
         engine,
@@ -518,12 +522,16 @@ class ResumeMigrator(BaseMigrator):
                     # -------------------------------------------------
 
                     # FINAL FORMAT:
-                    # resume/user_id/resume-data
+                    # https://greenlightlocker-com.s3.us-west-2.amazonaws.com/resume/user_id/resume_data
 
-                    file_path = (
+                    resume_key = (
                         f"resume/"
                         f"{source_gl_user_id}/"
-                        f"resume-data"
+                        f"resume_data"
+                    )
+
+                    file_path = self._build_resume_s3_url(
+                        resume_key
                     )
 
                     file_name = row_dict.get(
@@ -532,7 +540,7 @@ class ResumeMigrator(BaseMigrator):
 
                     if not file_name:
 
-                        file_name = "resume-data"
+                        file_name = "resume_data"
 
                     file_type = self._get_file_type(
                         file_name
@@ -860,6 +868,23 @@ class ResumeMigrator(BaseMigrator):
         if column_name in table.c:
 
             row[column_name] = value
+
+    # -------------------------------------------------
+    # BUILD RESUME S3 URL
+    # -------------------------------------------------
+
+    def _build_resume_s3_url(
+        self,
+        key: str
+    ) -> str:
+
+        clean_key = str(key).lstrip("/")
+
+        return (
+            f"https://{self.RESUME_S3_BUCKET}"
+            f".s3.{self.RESUME_S3_REGION}"
+            f".amazonaws.com/{clean_key}"
+        )
 
     # -------------------------------------------------
     # EXTRACT FILE NAME
