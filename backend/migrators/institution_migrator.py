@@ -98,7 +98,13 @@ class InstitutionMigrator(BaseMigrator):
                         'address2': row_dict[address_table.c.address_line_2] if row_dict[address_table.c.id] else None,
                         'city': row_dict[address_table.c.city] if row_dict[address_table.c.id] else None,
                         'state': self._map_state(row_dict[state_table.c.state_code]) if row_dict[address_table.c.id] else 0,
-                        'zipcode': row_dict[address_table.c.zip_code] if row_dict[address_table.c.id] else None,
+                        'zipcode': self._clean_zipcode(
+                            row_dict[address_table.c.zip_code],
+                            self._get_column_length(
+                                dest_table,
+                                "zipcode"
+                            )
+                        ) if row_dict[address_table.c.id] else None,
                         'country': self._map_country(row_dict[country_table.c.country_code]) if row_dict[address_table.c.id] else 0,
                         'phone_number': row_dict[institution_table.c.phone_number],
                         'notification_email': row_dict[institution_table.c.notification_email],
@@ -164,7 +170,13 @@ class InstitutionMigrator(BaseMigrator):
                     'address2': row_dict.get(address_table.c.address_line_2) if row_dict.get(address_table.c.id) else None,
                     'city': row_dict.get(address_table.c.city) if row_dict.get(address_table.c.id) else None,
                     'state': self._map_state(row_dict.get(state_table.c.state_code)) if row_dict.get(address_table.c.id) else 0,
-                    'zipcode': row_dict.get(address_table.c.zip_code) if row_dict.get(address_table.c.id) else None,
+                    'zipcode': self._clean_zipcode(
+                        row_dict.get(address_table.c.zip_code),
+                        self._get_column_length(
+                            dest_table,
+                            "zipcode"
+                        )
+                    ) if row_dict.get(address_table.c.id) else None,
                     'country': self._map_country(row_dict.get(country_table.c.country_code)) if row_dict.get(address_table.c.id) else 0,
                     'phone_number': row_dict.get(institution_table.c.phone_number) or row_dict.get('phone_number'),
                     'campus_status': 1 if row_dict.get(institution_table.c.active) or row_dict.get('active') else 2,
@@ -186,6 +198,48 @@ class InstitutionMigrator(BaseMigrator):
             'regionalServiceProvider': 5,
         }
         return mapping.get(old_type, 0)
+
+    def _clean_zipcode(
+        self,
+        zipcode,
+        max_length=None
+    ):
+        if zipcode is None:
+            return None
+
+        cleaned = "".join(
+            str(zipcode).split()
+        )
+
+        if (
+            max_length
+            and
+            len(cleaned) > max_length
+        ):
+
+            logger.warning(
+                f"Truncating zipcode "
+                f"{cleaned} to {max_length} chars"
+            )
+
+            return cleaned[:max_length]
+
+        return cleaned
+
+    def _get_column_length(
+        self,
+        table,
+        column_name
+    ):
+
+        if column_name not in table.c:
+            return None
+
+        return getattr(
+            table.c[column_name].type,
+            "length",
+            None
+        )
 
     def _map_state(self, state_code):
         if not state_code: return 0
