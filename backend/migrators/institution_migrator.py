@@ -37,7 +37,9 @@ class InstitutionMigrator(BaseMigrator):
             logger.error("Destination table 'institutions' not found or has no columns.")
             raise ValueError("Destination table 'institutions' not found.")
 
-        # Build join query and filter by parent_id and allowed types
+        # Build join query for every source institution row.
+        # Rows with parent_Institution_id are also inserted into
+        # institution_campuses in the second step.
         allowed_types = ['university', 'employer', 'parentuniversity', 'serviceprovider', 'regionalServiceProvider']
         query = select(institution_table, address_table, state_table, country_table).select_from(
             institution_table
@@ -45,7 +47,6 @@ class InstitutionMigrator(BaseMigrator):
             .join(state_table, address_table.c.state == state_table.c.id, isouter=True)
             .join(country_table, address_table.c.country == country_table.c.id, isouter=True)
         ).where(
-            institution_table.c.parent_Institution_id == None,
             institution_table.c.institution_type.in_(allowed_types)
         )
 
@@ -135,7 +136,18 @@ class InstitutionMigrator(BaseMigrator):
             .join(country_table, address_table.c.country == country_table.c.id, isouter=True)
         )
 
-        allowed_types = ['University', 'Employer', 'School', 'Service Provider', 'Regional Service Provider']
+        allowed_types = [
+            'university',
+            'employer',
+            'parentuniversity',
+            'serviceprovider',
+            'regionalServiceProvider',
+            'University',
+            'Employer',
+            'School',
+            'Service Provider',
+            'Regional Service Provider'
+        ]
         if self.config.get('limit') and self.engine.id_map:
             query = query.where(
                 institution_table.c.parent_Institution_id.in_(list(self.engine.id_map.keys())),
