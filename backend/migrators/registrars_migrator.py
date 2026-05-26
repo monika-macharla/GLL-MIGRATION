@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 
 from datetime import datetime
@@ -103,6 +104,47 @@ class RegistrarsMigrator(BaseMigrator):
             f"{registrar_table.columns.keys()}"
         )
 
+        source_institutions_table = self._manual_reflect(
+            "institution",
+            self.source_engine,
+            self.metadata_source
+        )
+
+        source_to_dest_institution_uuid = (
+            self._build_institution_uuid_lookup(
+                source_institutions_table,
+                institutions_table
+            )
+        )
+
+        existing_registrar_keys = set()
+
+        with self.dest_engine.connect() as dest_conn:
+
+            existing_rows = dest_conn.execute(
+                select(
+                    registrar_table.c.name,
+                    registrar_table.c.institution_uuid
+                ).where(
+                    registrar_table.c.deleted_at.is_(None)
+                )
+            ).fetchall()
+
+            for existing_row in existing_rows:
+
+                existing_row_dict = existing_row._mapping
+
+                existing_registrar_keys.add((
+                    self._normalize(
+                        existing_row_dict.get(
+                            registrar_table.c.name
+                        )
+                    ),
+                    existing_row_dict.get(
+                        registrar_table.c.institution_uuid
+                    )
+                ))
+
         query = select(
             source_table
         )
@@ -136,43 +178,20 @@ class RegistrarsMigrator(BaseMigrator):
 
                 row_dict = row._mapping
 
-                user_uuid, source_user = (
-                    self._resolve_user_uuid(
-                        row_dict,
-                        source_table,
-                        users_table
-                    )
+                source_institution_id = self._get_source_value(
+                    row_dict,
+                    source_table,
+                    "institute_id",
+                    "institution_id"
                 )
 
-                if not user_uuid:
-
-                    skipped_count += 1
-
-                    logger.warning(
-                        f"Skipping registrar row {index}: "
-                        "could not resolve user UUID. "
-                        f"source identifiers="
-                        f"{self._get_user_debug_values(row_dict, source_table)}"
-                    )
-
-                    continue
-
-                institution_uuid = (
-                    self._resolve_institution_uuid(
-                        row_dict,
-                        source_table,
-                        institutions_table
-                    )
+                institution_uuid = source_to_dest_institution_uuid.get(
+                    source_institution_id
                 )
 
                 if not institution_uuid:
 
                     skipped_count += 1
-
-                    logger.warning(
-                        f"Skipping registrar row {index}: "
-                        "could not resolve institution UUID"
-                    )
 
                     continue
 
@@ -180,6 +199,7 @@ class RegistrarsMigrator(BaseMigrator):
                     self._get_source_value(
                         row_dict,
                         source_table,
+                        "validity_start_date",
                         "created_at",
                         "created_date",
                         "created_on"
@@ -192,6 +212,7 @@ class RegistrarsMigrator(BaseMigrator):
                     self._get_source_value(
                         row_dict,
                         source_table,
+                        "validity_end_date",
                         "updated_at",
                         "last_modified_date",
                         "modified_at"
@@ -200,106 +221,51 @@ class RegistrarsMigrator(BaseMigrator):
                     created_at
                 )
 
-                email = (
-                    self._get_source_value(
-                        row_dict,
-                        source_table,
-                        "email",
-                        "user_email",
-                        "registrar_email"
-                    )
-                    or
-                    self._get_row_value(
-                        source_user,
-                        "email",
-                        "username",
-                        "login"
-                    )
-                )
-
-                first_name = (
-                    self._get_source_value(
-                        row_dict,
-                        source_table,
-                        "first_name",
-                        "firstname",
-                        "registrar_first_name"
-                    )
-                    or
-                    self._get_row_value(
-                        source_user,
-                        "first_name",
-                        "firstname"
-                    )
-                )
-
-                last_name = (
-                    self._get_source_value(
-                        row_dict,
-                        source_table,
-                        "last_name",
-                        "lastname",
-                        "registrar_last_name"
-                    )
-                    or
-                    self._get_row_value(
-                        source_user,
-                        "last_name",
-                        "lastname"
-                    )
-                )
-
                 full_name = (
                     self._get_source_value(
                         row_dict,
                         source_table,
-                        "name",
-                        "registrar_name"
+                        "registrar_name",
+                        "name"
                     )
-                    or
-                    " ".join(
-                        part
-                        for part in [
-                            str(first_name or "").strip(),
-                            str(last_name or "").strip()
-                        ]
-                        if part
-                    )
-                    or
-                    email
-                    or
-                    ""
                 )
 
-                status = self._map_status(
-                    self._get_source_value(
-                        row_dict,
-                        source_table,
-                        "status",
-                        "active"
-                    )
+                if not full_name:
+
+                    skipped_count += 1
+
+                    continue
+
+                registrar_key = (
+                    self._normalize(full_name),
+                    institution_uuid
+                )
+
+                if registrar_key in existing_registrar_keys:
+
+                    skipped_count += 1
+
+                    continue
+
+                registrar_uuid = str(uuid.uuid4())
+
+                registrar_sign_path = self._upload_signature(
+                    row_dict,
+                    source_table,
+                    registrar_uuid
                 )
 
                 mapped_row = {
-                    "uuid": str(uuid.uuid4()),
+                    "uuid": registrar_uuid,
                     "created_at": created_at,
                     "updated_at": updated_at,
                     "deleted_at": None,
-                    "user_id": user_uuid,
-                    "user_uuid": user_uuid,
-                    "registrar_id": user_uuid,
-                    "institution_id": institution_uuid,
-                    "institution_uuid": institution_uuid,
-                    "email": email,
-                    "registrar_email": email,
-                    "first_name": first_name,
-                    "last_name": last_name,
                     "name": full_name,
-                    "registrar_name": full_name,
-                    "status": status,
-                    "created_by": user_uuid,
-                    "updated_by": user_uuid,
-                    "deleted_by": None,
+                    "campus": None,
+                    "registrar_sign_path": registrar_sign_path,
+                    "institution_uuid": institution_uuid,
+                    "created_by": None,
+                    "updated_by": None,
                 }
 
                 insert_data.append(
@@ -307,6 +273,10 @@ class RegistrarsMigrator(BaseMigrator):
                         mapped_row,
                         registrar_table
                     )
+                )
+
+                existing_registrar_keys.add(
+                    registrar_key
                 )
 
             except Exception as error:
@@ -343,6 +313,128 @@ class RegistrarsMigrator(BaseMigrator):
         return len(
             insert_data
         )
+
+    def _build_institution_uuid_lookup(
+        self,
+        source_institutions_table,
+        destination_institutions_table
+    ):
+
+        source_lookup = {}
+
+        with self.source_engine.connect() as source_conn:
+
+            source_rows = source_conn.execute(
+                select(
+                    source_institutions_table.c.id,
+                    source_institutions_table.c.name
+                )
+            ).fetchall()
+
+            for source_row in source_rows:
+
+                source_row_dict = source_row._mapping
+
+                source_lookup[
+                    source_row_dict.get(
+                        source_institutions_table.c.id
+                    )
+                ] = self._normalize(
+                    source_row_dict.get(
+                        source_institutions_table.c.name
+                    )
+                )
+
+        destination_lookup = {}
+
+        with self.dest_engine.connect() as dest_conn:
+
+            destination_rows = dest_conn.execute(
+                select(
+                    destination_institutions_table.c.uuid,
+                    destination_institutions_table.c.name
+                )
+            ).fetchall()
+
+            for destination_row in destination_rows:
+
+                destination_row_dict = destination_row._mapping
+
+                destination_lookup[
+                    self._normalize(
+                        destination_row_dict.get(
+                            destination_institutions_table.c.name
+                        )
+                    )
+                ] = destination_row_dict.get(
+                    destination_institutions_table.c.uuid
+                )
+
+        institution_uuid_lookup = {}
+
+        for source_id, source_name in source_lookup.items():
+
+            destination_uuid = destination_lookup.get(
+                source_name
+            )
+
+            if destination_uuid:
+
+                institution_uuid_lookup[
+                    source_id
+                ] = destination_uuid
+
+        logger.info(
+            f"Loaded {len(institution_uuid_lookup)} "
+            f"registrar institution UUID mappings."
+        )
+
+        return institution_uuid_lookup
+
+    def _upload_signature(
+        self,
+        row,
+        source_table,
+        registrar_uuid
+    ):
+
+        signature = self._get_source_value(
+            row,
+            source_table,
+            "registrar_signature",
+            "signature",
+            "registrar_sign_path"
+        )
+
+        if not signature:
+
+            return None
+
+        signature_text = str(signature)
+
+        if len(signature_text) <= 500 and not signature_text.startswith(
+            "data:"
+        ):
+
+            return signature_text
+
+        if (
+            not getattr(self.storage, "bucket_name", None)
+            or not os.getenv("AWS_ACCESS_KEY_ID")
+        ):
+
+            return None
+
+        uploaded_path = self.storage.upload_base64(
+            signature_text,
+            f"registrars/{registrar_uuid}.png"
+        )
+
+        if uploaded_path and len(uploaded_path) <= 500:
+
+            return uploaded_path
+
+        return None
 
     def _get_configured_source_table(
         self,
