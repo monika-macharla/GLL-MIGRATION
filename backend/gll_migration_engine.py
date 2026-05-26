@@ -15,6 +15,12 @@ from migrators import (
 
     UsersMigrator,
 
+    UserRoleMigrator,
+
+    UserProfileMigrator,
+
+    ParentStudentMigrator,
+
     PasswordMigrator,
 
     UserInstitutionMigrator,
@@ -308,7 +314,7 @@ class GLLMigrationEngine:
         migrators = []
 
         # -----------------------------------------
-        # gl_user MIGRATION
+        # gl_user USERS MIGRATION
         # -----------------------------------------
 
         user_selected = any(
@@ -322,14 +328,49 @@ class GLLMigrationEngine:
 
             (
                 m.get("destination_table")
-                in [
+                == "users"
+            )
 
-                    "users",
+            for m in mappings
+        )
 
-                    "user_profile",
+        # -----------------------------------------
+        # USER ROLE MIGRATION
+        # -----------------------------------------
 
-                    "user_role"
-                ]
+        user_role_selected = any(
+
+            (
+                m.get("source_table")
+                == "gl_user"
+            )
+
+            and
+
+            (
+                m.get("destination_table")
+                == "user_role"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # gl_user USER PROFILE MIGRATION
+        # -----------------------------------------
+
+        user_profile_selected = any(
+
+            (
+                m.get("source_table")
+                == "gl_user"
+            )
+
+            and
+
+            (
+                m.get("destination_table")
+                == "user_profile"
             )
 
             for m in mappings
@@ -415,6 +456,31 @@ class GLLMigrationEngine:
 
             m.get("destination_table")
             == "user_institution"
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # PARENT STUDENT MIGRATION
+        # -----------------------------------------
+
+        parent_student_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "gl_parent_student"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "parent_student"
+            )
 
             for m in mappings
         )
@@ -730,6 +796,16 @@ class GLLMigrationEngine:
         )
 
         logger.info(
+            f"user_profile_selected="
+            f"{user_profile_selected}"
+        )
+
+        logger.info(
+            f"user_role_selected="
+            f"{user_role_selected}"
+        )
+
+        logger.info(
             f"gl_student_selected="
             f"{gl_student_selected}"
         )
@@ -747,6 +823,11 @@ class GLLMigrationEngine:
         logger.info(
             f"user_institution_selected="
             f"{user_institution_selected}"
+        )
+
+        logger.info(
+            f"parent_student_selected="
+            f"{parent_student_selected}"
         )
 
         logger.info(
@@ -821,6 +902,58 @@ class GLLMigrationEngine:
             migrators.append(
 
                 UsersMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add UserRoleMigrator
+        # -----------------------------------------
+
+        if user_role_selected:
+
+            logger.info(
+                "Adding UserRoleMigrator"
+            )
+
+            migrators.append(
+
+                UserRoleMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add UserProfileMigrator
+        # -----------------------------------------
+
+        if user_profile_selected:
+
+            logger.info(
+                "Adding UserProfileMigrator"
+            )
+
+            migrators.append(
+
+                UserProfileMigrator(
 
                     self,
 
@@ -925,6 +1058,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 UserInstitutionMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add ParentStudentMigrator
+        # -----------------------------------------
+
+        if parent_student_selected:
+
+            logger.info(
+                "Adding ParentStudentMigrator"
+            )
+
+            migrators.append(
+
+                ParentStudentMigrator(
 
                     self,
 
