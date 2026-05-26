@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 class UserProfileMigrator(BaseMigrator):
 
-    DEFAULT_BATCH_SIZE = 1000
+    DEFAULT_BATCH_SIZE = 10000
 
-    MAX_BATCH_SIZE = 1000
+    MAX_BATCH_SIZE = 10000
 
     GENDER_MAPPING = {
 
@@ -223,6 +223,7 @@ class UserProfileMigrator(BaseMigrator):
 
         migrated_count = 0
         batch_number = 0
+        migrated_user_uuids = set()
 
         with self.source_engine.connect() as source_conn:
 
@@ -272,8 +273,8 @@ class UserProfileMigrator(BaseMigrator):
                 usernames = []
                 audit_user_names = []
                 address_ids = []
-                source_user_ids = []
-                source_gl_user_ids = []
+                student_gl_user_ids = []
+                student_legacy_user_ids = []
                 parent_gl_user_ids = []
 
                 for row in results:
@@ -292,31 +293,37 @@ class UserProfileMigrator(BaseMigrator):
 
                         usernames.append(username)
 
-                    source_user_id = row_dict.get(
-                        source_table.c.user_id
-                    )
-
-                    if source_user_id is not None:
-
-                        source_user_ids.append(
-                            source_user_id
-                        )
-
                     source_gl_user_id = row_dict.get(
                         source_table.c.id
                     )
-
-                    if source_gl_user_id is not None:
-
-                        source_gl_user_ids.append(
-                            source_gl_user_id
-                        )
 
                     source_user_type = self._normalize(
                         row_dict.get(
                             source_table.c.user_type
                         )
                     )
+
+                    if (
+                        source_user_type == "student"
+                        and source_gl_user_id is not None
+                    ):
+
+                        student_gl_user_ids.append(
+                            source_gl_user_id
+                        )
+
+                    source_user_id = row_dict.get(
+                        source_table.c.user_id
+                    )
+
+                    if (
+                        source_user_type == "student"
+                        and source_user_id is not None
+                    ):
+
+                        student_legacy_user_ids.append(
+                            source_user_id
+                        )
 
                     if (
                         source_user_type == "parent"
@@ -407,6 +414,141 @@ class UserProfileMigrator(BaseMigrator):
                                 parent_address_id
                             )
 
+                student_lookup = {}
+
+                if student_gl_user_ids:
+
+                    student_results = source_conn.execute(
+                        select(
+                            gl_student_table.c.user_id,
+                            gl_student_table.c.first_name,
+                            gl_student_table.c.middle_name,
+                            gl_student_table.c.last_name,
+                            gl_student_table.c.date_of_birth,
+                            gl_student_table.c.address_id,
+                            gl_student_table.c.gender,
+                            gl_student_table.c.phone_no,
+                            gl_student_table.c.last4_ssn,
+                            gl_student_table.c.person_ethnics
+                        )
+                        .where(
+                            gl_student_table.c.user_id.in_(
+                                list(set(student_gl_user_ids))
+                            )
+                        )
+                        .order_by(
+                            gl_student_table.c.id
+                        )
+                    )
+
+                    for student_row in student_results:
+
+                        student_row_dict = student_row._mapping
+
+                        student_user_id = student_row_dict.get(
+                            gl_student_table.c.user_id
+                        )
+
+                        if student_user_id not in student_lookup:
+
+                            student_lookup[
+                                student_user_id
+                            ] = dict(student_row_dict)
+
+                        else:
+
+                            existing_student = student_lookup[
+                                student_user_id
+                            ]
+
+                            for student_column in (
+                                gl_student_table.c.first_name,
+                                gl_student_table.c.middle_name,
+                                gl_student_table.c.last_name,
+                                gl_student_table.c.date_of_birth,
+                                gl_student_table.c.address_id,
+                                gl_student_table.c.gender,
+                                gl_student_table.c.phone_no,
+                                gl_student_table.c.last4_ssn,
+                                gl_student_table.c.person_ethnics
+                            ):
+
+                                if self._first_value(
+                                    existing_student.get(
+                                        student_column
+                                    )
+                                ) is not None:
+
+                                    continue
+
+                                existing_student[
+                                    student_column
+                                ] = student_row_dict.get(
+                                    student_column
+                                )
+
+                        student_address_id = student_row_dict.get(
+                            gl_student_table.c.address_id
+                        )
+
+                        if student_address_id is not None:
+
+                            address_ids.append(
+                                student_address_id
+                            )
+
+                legacy_student_ssn_lookup = {}
+
+                if student_legacy_user_ids:
+
+                    legacy_student_results = source_conn.execute(
+                        select(
+                            gl_student_table.c.user_id,
+                            gl_student_table.c.last4_ssn
+                        )
+                        .where(
+                            gl_student_table.c.user_id.in_(
+                                list(set(student_legacy_user_ids))
+                            )
+                        )
+                        .where(
+                            gl_student_table.c.last4_ssn.is_not(
+                                None
+                            )
+                        )
+                        .order_by(
+                            gl_student_table.c.id
+                        )
+                    )
+
+                    for legacy_student_row in legacy_student_results:
+
+                        legacy_student_row_dict = (
+                            legacy_student_row._mapping
+                        )
+
+                        legacy_user_id = legacy_student_row_dict.get(
+                            gl_student_table.c.user_id
+                        )
+
+                        legacy_ssn = self._first_value(
+                            legacy_student_row_dict.get(
+                                gl_student_table.c.last4_ssn
+                            )
+                        )
+
+                        if (
+                            legacy_user_id is None
+                            or legacy_ssn is None
+                            or legacy_user_id in legacy_student_ssn_lookup
+                        ):
+
+                            continue
+
+                        legacy_student_ssn_lookup[
+                            legacy_user_id
+                        ] = legacy_ssn
+
                 destination_user_lookup = {}
 
                 lookup_user_names = list(
@@ -447,6 +589,38 @@ class UserProfileMigrator(BaseMigrator):
                                 )
                             ] = user_row_dict.get(
                                 users_table.c.uuid
+                            )
+
+                existing_profile_user_uuids = set()
+
+                lookup_user_uuids = [
+                    value
+                    for value in destination_user_lookup.values()
+                    if value is not None
+                ]
+
+                if lookup_user_uuids:
+
+                    with self.dest_engine.connect() as dest_conn:
+
+                        existing_profile_results = (
+                            dest_conn.execute(
+                                select(
+                                    user_profile_table.c.user_uuid
+                                ).where(
+                                    user_profile_table.c.user_uuid.in_(
+                                        list(set(lookup_user_uuids))
+                                    )
+                                )
+                            )
+                        )
+
+                        for profile_row in existing_profile_results:
+
+                            existing_profile_user_uuids.add(
+                                profile_row._mapping.get(
+                                    user_profile_table.c.user_uuid
+                                )
                             )
 
                 address_lookup = {}
@@ -520,64 +694,18 @@ class UserProfileMigrator(BaseMigrator):
                             ),
                         }
 
-                student_ssn_lookup = {}
-
-                student_user_ids = list(
-                    set(
-                        source_user_ids
-                        + source_gl_user_ids
-                    )
-                )
-
-                if student_user_ids:
-
-                    student_results = source_conn.execute(
-                        select(
-                            gl_student_table.c.user_id,
-                            gl_student_table.c.last4_ssn
-                        )
-                        .where(
-                            gl_student_table.c.user_id.in_(
-                                student_user_ids
-                            )
-                        )
-                        .where(
-                            gl_student_table.c.last4_ssn.is_not(
-                                None
-                            )
-                        )
-                    )
-
-                    for student_row in student_results:
-
-                        student_row_dict = student_row._mapping
-
-                        student_user_id = student_row_dict.get(
-                            gl_student_table.c.user_id
-                        )
-
-                        student_ssn = student_row_dict.get(
-                            gl_student_table.c.last4_ssn
-                        )
-
-                        if (
-                            student_user_id is None
-                            or student_ssn is None
-                            or not str(student_ssn).strip()
-                        ):
-
-                            continue
-
-                        if student_user_id not in student_ssn_lookup:
-
-                            student_ssn_lookup[
-                                student_user_id
-                            ] = student_ssn
-
                 insert_data = []
+                prepared_user_uuids = set()
                 skipped_users = 0
+                skipped_existing_profiles = 0
+                skipped_duplicate_profiles = 0
                 created_by_mapped = 0
                 updated_by_mapped = 0
+                student_profiles_sourced = 0
+                parent_profiles_sourced = 0
+                missing_student_details = 0
+                missing_parent_details = 0
+                legacy_student_ssn_used = 0
                 row_errors = 0
 
                 for row in results:
@@ -597,6 +725,21 @@ class UserProfileMigrator(BaseMigrator):
                         if not user_uuid:
 
                             skipped_users += 1
+
+                            continue
+
+                        if user_uuid in existing_profile_user_uuids:
+
+                            skipped_existing_profiles += 1
+
+                            continue
+
+                        if (
+                            user_uuid in migrated_user_uuids
+                            or user_uuid in prepared_user_uuids
+                        ):
+
+                            skipped_duplicate_profiles += 1
 
                             continue
 
@@ -675,6 +818,10 @@ class UserProfileMigrator(BaseMigrator):
                             source_table.c.gender
                         )
 
+                        source_gl_user_id = row_dict.get(
+                            source_table.c.id
+                        )
+
                         source_user_type = self._normalize(
                             row_dict.get(
                                 source_table.c.user_type
@@ -682,22 +829,47 @@ class UserProfileMigrator(BaseMigrator):
                         )
 
                         parent_data = {}
+                        student_data = {}
+
+                        if source_user_type == "student":
+
+                            student_data = student_lookup.get(
+                                source_gl_user_id,
+                                {}
+                            )
+
+                            if student_data:
+
+                                student_profiles_sourced += 1
+
+                            else:
+
+                                missing_student_details += 1
 
                         if source_user_type == "parent":
 
                             parent_data = parent_lookup.get(
-                                row_dict.get(
-                                    source_table.c.id
-                                ),
+                                source_gl_user_id,
                                 {}
                             )
 
-                            source_gender = (
-                                parent_data.get(
-                                    gl_parent_table.c.gender
-                                )
-                                or source_gender
-                            )
+                            if parent_data:
+
+                                parent_profiles_sourced += 1
+
+                            else:
+
+                                missing_parent_details += 1
+
+                        source_gender = self._first_value(
+                            student_data.get(
+                                gl_student_table.c.gender
+                            ),
+                            parent_data.get(
+                                gl_parent_table.c.gender
+                            ),
+                            source_gender
+                        )
 
                         mapped_gender = (
                             self.GENDER_MAPPING.get(
@@ -707,44 +879,121 @@ class UserProfileMigrator(BaseMigrator):
                         )
 
                         address_data = address_lookup.get(
-                            (
+                            self._first_value(
+                                student_data.get(
+                                    gl_student_table.c.address_id
+                                ),
                                 parent_data.get(
                                     gl_parent_table.c.address_id
-                                )
-                                or row_dict.get(
+                                ),
+                                row_dict.get(
                                     source_table.c.address_id
                                 )
                             ),
                             {}
                         )
 
-                        source_user_id = row_dict.get(
-                            source_table.c.user_id
-                        )
-
-                        source_gl_user_id = row_dict.get(
-                            source_table.c.id
-                        )
-
-                        ssn_number = (
-                            student_ssn_lookup.get(
-                                source_user_id
-                            )
-                        )
-
-                        if not ssn_number:
-
-                            ssn_number = (
-                                student_ssn_lookup.get(
-                                    source_gl_user_id
+                        ssn_number = self._first_value(
+                            student_data.get(
+                                gl_student_table.c.last4_ssn
+                            ),
+                            legacy_student_ssn_lookup.get(
+                                row_dict.get(
+                                    source_table.c.user_id
                                 )
-                            )
-
-                        if not ssn_number:
-
-                            ssn_number = row_dict.get(
+                            ),
+                            row_dict.get(
                                 source_table.c.last4_ssn
                             )
+                        )
+
+                        if (
+                            self._first_value(
+                                student_data.get(
+                                    gl_student_table.c.last4_ssn
+                                )
+                            ) is None
+                            and self._first_value(
+                                legacy_student_ssn_lookup.get(
+                                    row_dict.get(
+                                        source_table.c.user_id
+                                    )
+                                )
+                            ) is not None
+                        ):
+
+                            legacy_student_ssn_used += 1
+
+                        ethnicity = self._first_value(
+                            student_data.get(
+                                gl_student_table.c.person_ethnics
+                            ),
+                            row_dict.get(
+                                source_table.c.ethnicity
+                            )
+                        )
+
+                        dob = self._clean_datetime(
+                            self._first_value(
+                                student_data.get(
+                                    gl_student_table.c.date_of_birth
+                                ),
+                                parent_data.get(
+                                    gl_parent_table.c.date_of_birth
+                                ),
+                                row_dict.get(
+                                    source_table.c.date_of_birth
+                                )
+                            )
+                        )
+
+                        first_name = self._first_value(
+                            student_data.get(
+                                gl_student_table.c.first_name
+                            ),
+                            parent_data.get(
+                                gl_parent_table.c.first_name
+                            ),
+                            row_dict.get(
+                                source_table.c.first_name
+                            )
+                        )
+
+                        middle_name = self._first_value(
+                            student_data.get(
+                                gl_student_table.c.middle_name
+                            ),
+                            parent_data.get(
+                                gl_parent_table.c.middle_name
+                            ),
+                            row_dict.get(
+                                source_table.c.middle_name
+                            )
+                        )
+
+                        last_name = self._first_value(
+                            student_data.get(
+                                gl_student_table.c.last_name
+                            ),
+                            parent_data.get(
+                                gl_parent_table.c.last_name
+                            ),
+                            row_dict.get(
+                                source_table.c.last_name
+                            )
+                        )
+
+                        phone_number = self._first_value(
+                            student_data.get(
+                                gl_student_table.c.phone_no
+                            ),
+                            parent_data.get(
+                                gl_parent_table.c.phone_number
+                            ),
+                            row_dict.get(
+                                source_table.c.phone_no
+                            )
+                        )
 
                         insert_data.append({
 
@@ -760,45 +1009,15 @@ class UserProfileMigrator(BaseMigrator):
 
                             "profile_pic": None,
 
-                            "dob": self._clean_datetime(
-                                self._first_value(
-                                    parent_data.get(
-                                        gl_parent_table.c.date_of_birth
-                                    ),
-                                    row_dict.get(
-                                        source_table.c.date_of_birth
-                                    )
-                                )
-                            ),
+                            "dob": dob,
 
                             "prefix": None,
 
-                            "first_name": self._first_value(
-                                parent_data.get(
-                                    gl_parent_table.c.first_name
-                                ),
-                                row_dict.get(
-                                    source_table.c.first_name
-                                )
-                            ),
+                            "first_name": first_name,
 
-                            "middle_name": self._first_value(
-                                parent_data.get(
-                                    gl_parent_table.c.middle_name
-                                ),
-                                row_dict.get(
-                                    source_table.c.middle_name
-                                )
-                            ),
+                            "middle_name": middle_name,
 
-                            "last_name": self._first_value(
-                                parent_data.get(
-                                    gl_parent_table.c.last_name
-                                ),
-                                row_dict.get(
-                                    source_table.c.last_name
-                                )
-                            ),
+                            "last_name": last_name,
 
                             "suffix": None,
 
@@ -822,14 +1041,7 @@ class UserProfileMigrator(BaseMigrator):
                                 "zip_code"
                             ),
 
-                            "phone_number": self._first_value(
-                                parent_data.get(
-                                    gl_parent_table.c.phone_number
-                                ),
-                                row_dict.get(
-                                    source_table.c.phone_no
-                                )
-                            ),
+                            "phone_number": phone_number,
 
                             "country": address_data.get(
                                 "country_code"
@@ -845,9 +1057,7 @@ class UserProfileMigrator(BaseMigrator):
 
                             "ssn_number": ssn_number,
 
-                            "ethnicity": row_dict.get(
-                                source_table.c.ethnicity
-                            ),
+                            "ethnicity": ethnicity,
 
                             "two_factor_auth_option": (
                                 self._map_bool(
@@ -880,6 +1090,10 @@ class UserProfileMigrator(BaseMigrator):
                             ),
                         })
 
+                        prepared_user_uuids.add(
+                            user_uuid
+                        )
+
                     except Exception as row_error:
 
                         row_errors += 1
@@ -897,6 +1111,18 @@ class UserProfileMigrator(BaseMigrator):
                         f"User profile chunk {batch_number}: "
                         f"inserting {len(insert_data)} profiles; "
                         f"skipped_users={skipped_users}, "
+                        f"skipped_existing_profiles="
+                        f"{skipped_existing_profiles}, "
+                        f"skipped_duplicate_profiles="
+                        f"{skipped_duplicate_profiles}, "
+                        f"student_details={student_profiles_sourced}, "
+                        f"parent_details={parent_profiles_sourced}, "
+                        f"missing_student_details="
+                        f"{missing_student_details}, "
+                        f"missing_parent_details="
+                        f"{missing_parent_details}, "
+                        f"legacy_student_ssn_used="
+                        f"{legacy_student_ssn_used}, "
                         f"created_by_mapped={created_by_mapped}, "
                         f"updated_by_mapped={updated_by_mapped}, "
                         f"errors={row_errors}."
@@ -911,6 +1137,10 @@ class UserProfileMigrator(BaseMigrator):
 
                     migrated_count += len(insert_data)
 
+                    migrated_user_uuids.update(
+                        prepared_user_uuids
+                    )
+
                 else:
 
                     logger.warning(
@@ -918,6 +1148,10 @@ class UserProfileMigrator(BaseMigrator):
                         f"{chunk_start_id} to {chunk_end_id}: "
                         f"no profiles prepared; "
                         f"skipped_users={skipped_users}, "
+                        f"skipped_existing_profiles="
+                        f"{skipped_existing_profiles}, "
+                        f"skipped_duplicate_profiles="
+                        f"{skipped_duplicate_profiles}, "
                         f"errors={row_errors}."
                     )
 
