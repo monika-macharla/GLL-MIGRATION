@@ -7,37 +7,42 @@ source db:                          destination db
 
 2. institution                         institutions,campuses(gllauthservicemigration)
 
-3. gl_user                             users,user_role,user_profile(gllauthservicemigration)
+3. gl_user                             users,user_role,institution_user(gllauthservicemigration)
 
-<!-- gl_student                          users,user_role,user_profile(gllauthservicemigration) -->(not needed)
+4. gl_user                              user_role
 
-4. institution_user                    user_institution(gllauthservicemigration)
+5. gl_user                              user_institution
 
-5. jhi_user                            user_hashed_password(gllauthservicemigration)
-
-6. enrollment                          user_enrollments(gllauthservicemigration)
+gl_parent_student                       parent_student
 
 
-7. institution_registrar              registrars
+6. gl_user                              user_profile(gllauthservicemigration) 
 
-8. student_preference                 my_preferences
+7. jhi_user                            user_hashed_password(gllauthservicemigration)
 
-9. ferpa                             ferpa
+8. enrollment                          user_enrollments(gllauthservicemigration)
 
-10. nsapi_criteria                    scholarship_prefernces
+
+9. institution_registrar              registrars
+
+10. student_preference                 my_preferences
+
+11. ferpa                             ferpa
+
+12. nsapi_criteria                    scholarship_prefernces
 
 
 2. gllreports
 
-11. badge                           credentials_digital_badges,(gllreports)(support gllauthservicemigration)
+13. badge                           credentials_digital_badges,(gllreports)(support gllauthservicemigration)
                                     credentials_digital_badge_info,credentials_all
-12. resume                                                          credentials_resume, credentials_all
-13. recommendation_letter,recommendation_letter_request             credentials_recommendation_letters. credentials_all
+14. resume                                                          credentials_resume, credentials_all
+15. recommendation_letter,recommendation_letter_request             credentials_recommendation_letters. credentials_all
 
-14. other-credentials                    self-uploads, credentials_all
-15. transcript                           credentials_transcript, credentials_all
-16. certificate                          credentials_cerifications, credentials_all
-17. badge_shared                         credentials_shared,students_credentials_share_history
+16. other-credentials                    self-uploads, credentials_all
+17. transcript                           credentials_transcript, credentials_all
+18. certificate                          credentials_cerifications, credentials_all
+19. badge_shared                         credentials_shared,students_credentials_share_history
 
 
 
