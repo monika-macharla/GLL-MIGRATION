@@ -269,6 +269,8 @@ async def migrate(request: MigrationRequest):
                 
                 "user_institution",
 
+                "parent_student",
+
                 "user_enrollments",
                 
                 "credentials_digital_badges",
@@ -320,6 +322,8 @@ async def migrate(request: MigrationRequest):
                 "gl_user",
 
                 "institution_user",
+
+                "gl_parent_student",
 
                 "student_enrollment",
                 
