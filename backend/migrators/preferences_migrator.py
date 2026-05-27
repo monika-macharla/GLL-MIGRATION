@@ -21,7 +21,7 @@ class PreferencesMigrator(BaseMigrator):
 
     SOURCE_TABLE = "student_preference"
     DESTINATION_TABLE = "my_preferences"
-    INSERT_CHUNK_SIZE = 10
+    INSERT_CHUNK_SIZE = 10000
 
     PREFERENCE_ITEM_TYPE = "auth.service.v1.PreferenceItem"
     EDUCATION_PREFERENCE_TYPE = "auth.service.v1.EducationPreference"
@@ -73,6 +73,12 @@ class PreferencesMigrator(BaseMigrator):
             self.metadata_dest
         )
 
+        source_users_table = self._manual_reflect(
+            "gl_user",
+            self.source_engine,
+            self.metadata_source
+        )
+
         institutions_table = None
 
         if "institutions" in inspect(
@@ -95,6 +101,11 @@ class PreferencesMigrator(BaseMigrator):
             f"{preferences_table.columns.keys()}"
         )
 
+        logger.info(
+            f"Using preferences insert chunk size: "
+            f"{self.INSERT_CHUNK_SIZE}"
+        )
+
         self._destination_user_lookup = (
             self._build_destination_user_lookup(
                 users_table
@@ -113,8 +124,53 @@ class PreferencesMigrator(BaseMigrator):
             if institution.get("name")
         ]
 
-        query = select(
-            source_table
+        existing_user_ids = set()
+
+        with self.dest_engine.connect() as dest_conn:
+
+            existing_rows = dest_conn.execute(
+                select(
+                    preferences_table.c.user_id
+                ).where(
+                    preferences_table.c.deleted_at.is_(None)
+                )
+            ).fetchall()
+
+            for existing_row in existing_rows:
+
+                existing_user_id = existing_row._mapping.get(
+                    preferences_table.c.user_id
+                )
+
+                if existing_user_id:
+
+                    existing_user_ids.add(
+                        existing_user_id
+                    )
+
+        logger.info(
+            f"Loaded {len(existing_user_ids)} existing "
+            f"my_preferences user_id values for idempotent reruns."
+        )
+
+        query = (
+            select(
+                source_table,
+                source_users_table.c.username
+            )
+            .select_from(
+                source_table.join(
+                    source_users_table,
+                    source_table.c.user_id
+                    == source_users_table.c.id
+                )
+            )
+            .where(
+                source_users_table.c.username.is_not(None)
+            )
+            .where(
+                source_users_table.c.username != ""
+            )
         )
 
         if self.config.get("limit"):
@@ -129,9 +185,17 @@ class PreferencesMigrator(BaseMigrator):
                 query
             ).fetchall()
 
+        logger.info(
+            f"Fetched {len(rows)} source student_preference rows "
+            f"with resolvable gl_user usernames."
+        )
+
         insert_data = []
 
         skipped_count = 0
+        skipped_missing_destination_user = 0
+        skipped_existing_user = 0
+        row_error_count = 0
 
         for index, row in enumerate(
             rows,
@@ -142,25 +206,29 @@ class PreferencesMigrator(BaseMigrator):
 
                 row_dict = row._mapping
 
-                source_user_id = self._get_source_value(
+                source_username = self._get_source_value(
                     row_dict,
-                    source_table,
-                    "user_id"
+                    source_users_table,
+                    "username"
                 )
 
-                destination_user_uuid = self._resolve_user_uuid(
-                    source_user_id,
-                    users_table
+                destination_user_uuid = (
+                    self._destination_user_lookup.get(
+                        self._normalize(source_username)
+                    )
                 )
 
                 if not destination_user_uuid:
 
                     skipped_count += 1
+                    skipped_missing_destination_user += 1
 
-                    logger.warning(
-                        f"Skipping preference row {index}: "
-                        f"could not resolve user_id={source_user_id}"
-                    )
+                    continue
+
+                if destination_user_uuid in existing_user_ids:
+
+                    skipped_count += 1
+                    skipped_existing_user += 1
 
                     continue
 
@@ -322,14 +390,39 @@ class PreferencesMigrator(BaseMigrator):
                     )
                 )
 
+                existing_user_ids.add(
+                    destination_user_uuid
+                )
+
             except Exception as error:
 
                 skipped_count += 1
+                row_error_count += 1
 
                 logger.exception(
                     f"Failed processing preference row "
                     f"{index}: {error}"
                 )
+
+            if index % self.INSERT_CHUNK_SIZE == 0:
+
+                logger.info(
+                    f"Prepared preferences progress: "
+                    f"processed={index}, "
+                    f"prepared={len(insert_data)}, "
+                    f"skipped={skipped_count}."
+                )
+
+        logger.info(
+            f"Prepared preferences rows: "
+            f"source_rows={len(rows)}, "
+            f"prepared={len(insert_data)}, "
+            f"skipped={skipped_count}, "
+            f"missing_destination_user="
+            f"{skipped_missing_destination_user}, "
+            f"existing_user={skipped_existing_user}, "
+            f"errors={row_error_count}."
+        )
 
         if not insert_data:
 
@@ -341,11 +434,20 @@ class PreferencesMigrator(BaseMigrator):
 
         inserted_count = 0
 
-        for chunk_start in range(
-            0,
-            len(insert_data),
-            self.INSERT_CHUNK_SIZE
+        total_chunks = (
+            (len(insert_data) + self.INSERT_CHUNK_SIZE - 1)
+            // self.INSERT_CHUNK_SIZE
+        )
+
+        for chunk_number, chunk_start in enumerate(
+            range(
+                0,
+                len(insert_data),
+                self.INSERT_CHUNK_SIZE
+            ),
+            start=1
         ):
+
 
             chunk = insert_data[
                 chunk_start:chunk_start + self.INSERT_CHUNK_SIZE
@@ -356,7 +458,8 @@ class PreferencesMigrator(BaseMigrator):
             )
 
             logger.info(
-                "Inserting preference rows "
+                f"Preferences insert chunk "
+                f"{chunk_number}/{total_chunks}: rows "
                 f"{chunk_start + 1}-{chunk_end} "
                 f"of {len(insert_data)}"
             )
@@ -372,11 +475,22 @@ class PreferencesMigrator(BaseMigrator):
                 chunk
             )
 
+            logger.info(
+                f"Preferences insert chunk "
+                f"{chunk_number}/{total_chunks} complete; "
+                f"inserted_total={inserted_count}."
+            )
+
         logger.info(
             "Preferences Migration summary: "
             f"inserted={inserted_count}, "
             f"skipped={skipped_count}, "
-            f"prepared={len(insert_data)}"
+            f"prepared={len(insert_data)}, "
+            f"source_rows={len(rows)}, "
+            f"missing_destination_user="
+            f"{skipped_missing_destination_user}, "
+            f"existing_user={skipped_existing_user}, "
+            f"errors={row_error_count}"
         )
 
         return inserted_count

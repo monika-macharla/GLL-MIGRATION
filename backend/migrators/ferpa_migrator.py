@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 
 from datetime import datetime
@@ -16,7 +17,8 @@ class FerpaMigrator(BaseMigrator):
 
     SOURCE_TABLE = "ferpa"
     DESTINATION_TABLE = "ferpa"
-    INSERT_CHUNK_SIZE = 10
+    INSERT_CHUNK_SIZE = 10000
+    DESTINATION_TEXT_LIMIT = 65000
 
     def __init__(
         self,
@@ -36,7 +38,9 @@ class FerpaMigrator(BaseMigrator):
 
         self.config = config
         self._destination_user_lookup = {}
-        self._source_user_uuid_cache = {}
+        self._signature_upload_count = 0
+        self._signature_upload_failed_count = 0
+        self._oversized_signature_without_storage_count = 0
 
     def migrate(self) -> int:
 
@@ -72,216 +76,360 @@ class FerpaMigrator(BaseMigrator):
             self.metadata_dest
         )
 
+        source_users_table = self._manual_reflect(
+            "gl_user",
+            self.source_engine,
+            self.metadata_source
+        )
+
         self._destination_user_lookup = (
             self._build_destination_user_lookup(
                 users_table
             )
         )
 
-        query = select(
-            source_table
-        )
-
-        if self.config.get("limit"):
-
-            query = query.limit(
-                self.config["limit"]
+        existing_student_uuids = (
+            self._load_existing_student_uuids(
+                destination_table
             )
-
-        with self.source_engine.connect() as source_conn:
-
-            rows = source_conn.execute(
-                query
-            ).fetchall()
+        )
 
         logger.info(
-            f"Found {len(rows)} FERPA records"
+            "Using FERPA insert chunk size: "
+            f"{self.INSERT_CHUNK_SIZE}"
         )
 
-        insert_data = []
+        inserted_count = 0
+        prepared_count = 0
+        fetched_count = 0
+        skipped_count = 0
+        skipped_missing_destination_user = 0
+        skipped_existing_student = 0
+        row_error_count = 0
+        self._signature_upload_count = 0
+        self._signature_upload_failed_count = 0
+        self._oversized_signature_without_storage_count = 0
 
-        for index, row in enumerate(
-            rows,
-            start=1
-        ):
+        last_source_id = 0
+        remaining_limit = self.config.get("limit")
 
-            try:
+        if remaining_limit:
 
-                row_dict = row._mapping
+            remaining_limit = int(
+                remaining_limit
+            )
 
-                source_user_id = self._get_source_value(
-                    row_dict,
+        while True:
+
+            fetch_size = self.INSERT_CHUNK_SIZE
+
+            if remaining_limit is not None:
+
+                if remaining_limit <= 0:
+
+                    break
+
+                fetch_size = min(
+                    fetch_size,
+                    remaining_limit
+                )
+
+            query = (
+                select(
                     source_table,
-                    "user_id"
+                    source_users_table.c.username,
+                    source_users_table.c.user_type
+                )
+                .select_from(
+                    source_table.join(
+                        source_users_table,
+                        source_table.c.user_id
+                        == source_users_table.c.id
+                    )
+                )
+                .where(
+                    source_table.c.id > last_source_id
+                )
+                .where(
+                    source_users_table.c.username.is_not(None)
+                )
+                .where(
+                    source_users_table.c.username != ""
+                )
+                .order_by(
+                    source_table.c.id
+                )
+                .limit(
+                    fetch_size
+                )
+            )
+
+            with self.source_engine.connect() as source_conn:
+
+                rows = source_conn.execute(
+                    query
+                ).fetchall()
+
+            if not rows:
+
+                break
+
+            fetched_count += len(
+                rows
+            )
+
+            if remaining_limit is not None:
+
+                remaining_limit -= len(
+                    rows
                 )
 
-                student_uuid = self._resolve_user_uuid(
-                    source_user_id
-                )
+            insert_data = []
 
-                if not student_uuid:
+            for row in rows:
 
-                    logger.warning(
-                        f"Skipping FERPA row {index}: "
-                        f"could not resolve user_id={source_user_id}"
+                try:
+
+                    row_dict = row._mapping
+
+                    last_source_id = self._get_source_value(
+                        row_dict,
+                        source_table,
+                        "id"
                     )
 
-                    continue
+                    source_username = self._get_source_value(
+                        row_dict,
+                        source_users_table,
+                        "username"
+                    )
 
-                signed_date = self._get_source_value(
-                    row_dict,
-                    source_table,
-                    "ferpa_terms_agreed_date"
-                )
+                    student_uuid = self._destination_user_lookup.get(
+                        self._normalize(source_username)
+                    )
 
-                created_at = signed_date or datetime.utcnow()
+                    if not student_uuid:
 
-                mapped_row = {
-                    "uuid": str(uuid.uuid4()),
-                    "created_at": created_at,
-                    "updated_at": created_at,
-                    "deleted_at": None,
-                    "student_uuid": student_uuid,
-                    "is_signed": self._is_truthy(
-                        self._get_source_value(
+                        skipped_count += 1
+                        skipped_missing_destination_user += 1
+
+                        continue
+
+                    if student_uuid in existing_student_uuids:
+
+                        skipped_count += 1
+                        skipped_existing_student += 1
+
+                        continue
+
+                    signed_date = self._get_source_value(
+                        row_dict,
+                        source_table,
+                        "ferpa_terms_agreed_date"
+                    )
+
+                    created_at = signed_date or datetime.utcnow()
+
+                    ferpa_uuid = str(uuid.uuid4())
+
+                    mapped_row = {
+                        "uuid": ferpa_uuid,
+                        "created_at": created_at,
+                        "updated_at": created_at,
+                        "deleted_at": None,
+                        "student_uuid": student_uuid,
+                        "is_signed": self._is_truthy(
+                            self._get_source_value(
+                                row_dict,
+                                source_table,
+                                "authorized"
+                            )
+                        ),
+                        "ferpa_evidence_signature": (
+                            self._map_signature(
+                                row_dict,
+                                source_table,
+                                ferpa_uuid
+                            )
+                        ),
+                        "signed_by": self._get_source_value(
                             row_dict,
                             source_table,
-                            "authorized"
+                            "signed_name"
+                        ),
+                        "signed_date": signed_date,
+                        "created_by": student_uuid,
+                        "updated_by": student_uuid,
+                    }
+
+                    insert_data.append(
+                        self._filter_to_table_columns(
+                            mapped_row,
+                            destination_table
                         )
-                    ),
-                    "ferpa_evidence_signature": self._get_source_value(
-                        row_dict,
-                        source_table,
-                        "ferpa_signature"
-                    ),
-                    "signed_by": self._get_source_value(
-                        row_dict,
-                        source_table,
-                        "signed_name"
-                    ),
-                    "signed_date": signed_date,
-                    "created_by": student_uuid,
-                    "updated_by": student_uuid,
-                }
-
-                insert_data.append(
-                    self._filter_to_table_columns(
-                        mapped_row,
-                        destination_table
                     )
+
+                except Exception as error:
+
+                    row_error_count += 1
+
+                    logger.exception(
+                        "Failed processing FERPA source id "
+                        f"{last_source_id}: {error}"
+                    )
+
+            if not insert_data:
+
+                logger.info(
+                    "FERPA chunk fetched "
+                    f"{len(rows)} rows through source id "
+                    f"{last_source_id}; nothing to insert."
                 )
 
-            except Exception as error:
-
-                logger.exception(
-                    f"Failed processing FERPA row "
-                    f"{index}: {error}"
-                )
-
-        if not insert_data:
-
-            logger.warning(
-                "No valid FERPA records available for insertion"
-            )
-
-            return 0
-
-        inserted_count = 0
-
-        for chunk_start in range(
-            0,
-            len(insert_data),
-            self.INSERT_CHUNK_SIZE
-        ):
-
-            chunk = insert_data[
-                chunk_start:chunk_start + self.INSERT_CHUNK_SIZE
-            ]
-
-            chunk_end = chunk_start + len(
-                chunk
-            )
+                continue
 
             logger.info(
-                "Inserting FERPA rows "
-                f"{chunk_start + 1}-{chunk_end} "
-                f"of {len(insert_data)}"
+                "Inserting FERPA chunk: "
+                f"prepared={len(insert_data)}, "
+                f"source_id_through={last_source_id}, "
+                f"total_fetched={fetched_count}"
             )
 
             with self.dest_engine.begin() as dest_conn:
 
                 result = dest_conn.execute(
                     insert(destination_table),
-                    chunk
+                    insert_data
                 )
 
-            inserted_count += result.rowcount or len(
-                chunk
+            inserted_now = result.rowcount or len(
+                insert_data
+            )
+
+            inserted_count += inserted_now
+            prepared_count += len(
+                insert_data
+            )
+
+            logger.info(
+                "FERPA chunk inserted: "
+                f"inserted_now={inserted_now}, "
+                f"inserted_total={inserted_count}"
+            )
+
+        if not prepared_count:
+
+            logger.warning(
+                "No valid FERPA records available for insertion"
             )
 
         logger.info(
             "FERPA Migration summary: "
             f"inserted={inserted_count}, "
-            f"prepared={len(insert_data)}"
+            f"prepared={prepared_count}, "
+            f"fetched={fetched_count}, "
+            f"skipped={skipped_count}, "
+            f"skipped_missing_destination_user="
+            f"{skipped_missing_destination_user}, "
+            f"skipped_existing_student={skipped_existing_student}, "
+            f"row_errors={row_error_count}, "
+            f"signature_uploads={self._signature_upload_count}, "
+            f"signature_upload_failed="
+            f"{self._signature_upload_failed_count}, "
+            f"oversized_signature_without_storage="
+            f"{self._oversized_signature_without_storage_count}"
         )
 
         return inserted_count
 
-    def _resolve_user_uuid(
+    def _map_signature(
         self,
-        source_user_id
+        row,
+        source_table,
+        ferpa_uuid
     ):
 
-        if not source_user_id:
+        signature = self._get_source_value(
+            row,
+            source_table,
+            "ferpa_signature"
+        )
+
+        if not signature:
 
             return None
 
-        if source_user_id in self._source_user_uuid_cache:
-
-            return self._source_user_uuid_cache[
-                source_user_id
-            ]
-
-        source_user = self.fetch_one_by_column(
-            self.source_engine,
-            "gl_user",
-            "id",
-            source_user_id
+        signature_text = str(
+            signature
         )
 
-        if not source_user:
+        if len(signature_text) <= self.DESTINATION_TEXT_LIMIT:
 
-            source_user = self.fetch_one_by_column(
-                self.source_engine,
-                "jhi_user",
-                "id",
-                source_user_id
+            return signature_text
+
+        if (
+            not getattr(self.storage, "bucket_name", None)
+            or not os.getenv("AWS_ACCESS_KEY_ID")
+        ):
+
+            self._oversized_signature_without_storage_count += 1
+
+            return None
+
+        uploaded_path = self.storage.upload_base64(
+            signature_text,
+            f"ferpa/{ferpa_uuid}.png"
+        )
+
+        if (
+            uploaded_path
+            and len(uploaded_path) <= self.DESTINATION_TEXT_LIMIT
+        ):
+
+            self._signature_upload_count += 1
+
+            return uploaded_path
+
+        self._signature_upload_failed_count += 1
+
+        return None
+
+    def _load_existing_student_uuids(
+        self,
+        destination_table
+    ):
+
+        existing_student_uuids = set()
+
+        with self.dest_engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    destination_table.c.student_uuid
+                ).where(
+                    destination_table.c.deleted_at.is_(None)
+                )
+            ).fetchall()
+
+        for row in rows:
+
+            student_uuid = row._mapping.get(
+                destination_table.c.student_uuid
             )
 
-        source_username = self._get_row_value(
-            source_user,
-            "username",
-            "login",
-            "email"
+            if student_uuid:
+
+                existing_student_uuids.add(
+                    student_uuid
+                )
+
+        logger.info(
+            "Loaded "
+            f"{len(existing_student_uuids)} existing FERPA "
+            "student_uuid values for idempotent reruns."
         )
 
-        if not source_username:
-
-            self._source_user_uuid_cache[
-                source_user_id
-            ] = None
-
-            return None
-
-        destination_user_uuid = self._destination_user_lookup.get(
-            self._normalize(source_username)
-        )
-
-        self._source_user_uuid_cache[
-            source_user_id
-        ] = destination_user_uuid
-
-        return destination_user_uuid
+        return existing_student_uuids
 
     def _build_destination_user_lookup(
         self,
@@ -367,28 +515,6 @@ class FerpaMigrator(BaseMigrator):
 
         return None
 
-    def _get_row_value(
-        self,
-        row,
-        *column_names
-    ):
-
-        if not row:
-
-            return None
-
-        for column_name in column_names:
-
-            value = row.get(
-                column_name
-            )
-
-            if value is not None:
-
-                return value
-
-        return None
-
     def _filter_to_table_columns(
         self,
         row,
@@ -432,4 +558,9 @@ class FerpaMigrator(BaseMigrator):
 
             return ""
 
-        return str(value).strip().lower()
+        return (
+            str(value)
+            .strip()
+            .lower()
+            .replace(" ", "")
+        )
