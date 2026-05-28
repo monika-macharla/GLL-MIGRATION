@@ -49,7 +49,9 @@ from migrators import (
 
     FerpaMigrator,
 
-    NsapiPreferencesMigrator
+    NsapiPreferencesMigrator,
+
+    CredentialVisibilityMigrator
 
 )
 
@@ -799,6 +801,37 @@ class GLLMigrationEngine:
 
             for m in mappings
         )
+
+        # -----------------------------------------
+        # CREDENTIAL VISIBILITY / MODULE PERMISSIONS
+        # -----------------------------------------
+
+        credential_visibility_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "student_credential_visibility",
+                    "student_crdential_visibility"
+                ]
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in [
+                    "module_permissions",
+                    "permissions"
+                ]
+            )
+
+            for m in mappings
+        )
         # -----------------------------------------
         # Logs
         # -----------------------------------------
@@ -901,6 +934,11 @@ class GLLMigrationEngine:
         logger.info(
             f"nsapi_preferences_selected="
             f"{nsapi_preferences_selected}"
+        )
+
+        logger.info(
+            f"credential_visibility_selected="
+            f"{credential_visibility_selected}"
         )
         # -----------------------------------------
         # Add UsersMigrator
@@ -1409,6 +1447,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 NsapiPreferencesMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CredentialVisibilityMigrator
+        # -----------------------------------------
+
+        if credential_visibility_selected:
+
+            logger.info(
+                "Adding CredentialVisibilityMigrator"
+            )
+
+            migrators.append(
+
+                CredentialVisibilityMigrator(
 
                     self,
 
