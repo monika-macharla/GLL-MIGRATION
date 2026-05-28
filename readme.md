@@ -31,8 +31,9 @@ gl_parent_student                       parent_student
 
 12. nsapi_criteria                    scholarship_prefernces
 
+13. student_credential_visibility     module_permissions
+
 //user_campus
-//credential visibility
 
 
 2. gllreports
