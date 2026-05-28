@@ -667,11 +667,15 @@ class GLLMigrationEngine:
                 ).strip().lower()
                 in [
                     "badge_shared",
+                    "certificate_share",
                     "certificate_shared",
                     "other_credential_share",
                     "recommendation_letter_share",
                     "self_uploaded_transcript_share",
                     "transcript_shared",
+                    "hs_transcript_shared",
+                    "cc_transcript_shared",
+                    "4yr_transcript_shared",
                     "resume_share"
                 ]
             )
@@ -684,7 +688,8 @@ class GLLMigrationEngine:
                 ).strip().lower()
                 in [
                     "credentials_shared",
-                    "student_credentials_share_history"
+                    "student_credentials_share_history",
+                    "students_credentials_share_history"
                 ]
             )
 
