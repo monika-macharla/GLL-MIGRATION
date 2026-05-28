@@ -1,13 +1,15 @@
-import uuid
+import json
 import logging
 import mimetypes
+import uuid
 
-from urllib.parse import urlparse
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from sqlalchemy import (
+    insert,
     select,
-    insert
 )
 
 from .base_migrator import BaseMigrator
@@ -17,9 +19,16 @@ logger = logging.getLogger(__name__)
 
 class DigitalBadgesMigrator(BaseMigrator):
 
-    BADGE_S3_BUCKET = "greenlightlocker-com"
-
-    BADGE_S3_REGION = "us-west-2"
+    SOURCE_TABLE = "badge"
+    BADGES_TABLE = "credentials_digital_badges"
+    BADGE_INFO_TABLE = "credentials_digital_badge_info"
+    CREDENTIALS_TABLE = "credentials_all"
+    CREDENTIAL_TYPE = 3
+    CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED = 2
+    DYNAMIC_VALUE = "DYNAMIC"
+    S3_BASE_URL = "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    DEFAULT_BATCH_SIZE = 10000
+    MAX_BATCH_SIZE = 10000
 
     def __init__(
         self,
@@ -31,39 +40,19 @@ class DigitalBadgesMigrator(BaseMigrator):
     ):
 
         super().__init__(
-
             engine,
-
             source_engine,
-
             dest_engine,
-
             storage
         )
 
         self.config = config
 
-    # -------------------------------------------------
-    # MAIN MIGRATION
-    # -------------------------------------------------
-
     def migrate(self) -> int:
-
-        logger.info(
-            "======================================"
-        )
 
         logger.info(
             "Starting Digital Badges Migration..."
         )
-
-        logger.info(
-            "======================================"
-        )
-
-        # -------------------------------------------------
-        # AUTH LOOKUP DB
-        # -------------------------------------------------
 
         auth_db_engine = self.get_lookup_engine(
             "auth_db"
@@ -72,754 +61,440 @@ class DigitalBadgesMigrator(BaseMigrator):
         if not auth_db_engine:
 
             raise ValueError(
-                "auth_db lookup engine "
-                "not configured"
+                "auth_db lookup engine not configured"
             )
 
-        logger.info(
-            "auth_db lookup engine loaded"
-        )
-
-        # -------------------------------------------------
-        # SOURCE TABLES
-        # -------------------------------------------------
-
         badge_table = self._manual_reflect(
-
-            'badge',
-
+            self.SOURCE_TABLE,
             self.source_engine,
-
             self.metadata_source
         )
 
-        # -------------------------------------------------
-        # DESTINATION TABLES
-        # -------------------------------------------------
+        source_student_table = self._manual_reflect(
+            "gl_student",
+            self.source_engine,
+            self.metadata_source
+        )
 
-        dest_table = self._manual_reflect(
+        source_user_table = self._manual_reflect(
+            "gl_user",
+            self.source_engine,
+            self.metadata_source
+        )
 
-            'credentials_digital_badges',
-
+        badges_table = self._manual_reflect(
+            self.BADGES_TABLE,
             self.dest_engine,
-
             self.metadata_dest
         )
 
         badge_info_table = self._manual_reflect(
-
-            'credentials_digital_badge_info',
-
+            self.BADGE_INFO_TABLE,
             self.dest_engine,
-
             self.metadata_dest
         )
 
         credentials_table = self._manual_reflect(
-
-            'credentials_all',
-
+            self.CREDENTIALS_TABLE,
             self.dest_engine,
+            self.metadata_dest
+        )
 
+        auth_users_table = self._manual_reflect(
+            "users",
+            auth_db_engine,
+            self.metadata_dest
+        )
+
+        auth_user_institution_table = self._manual_reflect(
+            "user_institution",
+            auth_db_engine,
+            self.metadata_dest
+        )
+
+        auth_user_enrollments_table = self._manual_reflect(
+            "user_enrollments",
+            auth_db_engine,
+            self.metadata_dest
+        )
+
+        auth_institution_table = self._manual_reflect(
+            "institutions",
+            auth_db_engine,
             self.metadata_dest
         )
 
         logger.info(
-            "Successfully reflected tables"
+            f"badge source columns: {badge_table.columns.keys()}"
+        )
+        logger.info(
+            f"credentials_digital_badges columns: "
+            f"{badges_table.columns.keys()}"
+        )
+        logger.info(
+            f"credentials_digital_badge_info columns: "
+            f"{badge_info_table.columns.keys()}"
+        )
+        logger.info(
+            f"credentials_all columns: {credentials_table.columns.keys()}"
         )
 
-        # -------------------------------------------------
-        # FETCH RECORDS
-        # -------------------------------------------------
+        batch_size = self._get_batch_size()
 
-        query = select(
-            badge_table
+        destination_user_lookup = self._build_destination_user_lookup(
+            auth_users_table,
+            auth_db_engine
         )
 
-        if self.config.get("limit"):
+        user_institution_lookup = self._build_user_institution_lookup(
+            auth_user_institution_table,
+            auth_db_engine
+        )
 
-            query = query.limit(
-                self.config["limit"]
+        user_enrollment_lookup = self._build_user_enrollment_lookup(
+            auth_user_enrollments_table,
+            auth_db_engine
+        )
+
+        institution_name_by_uuid = self._build_institution_name_lookup(
+            auth_institution_table,
+            auth_db_engine
+        )
+
+        existing_credential_paths = self._load_existing_credential_paths(
+            badges_table,
+            credentials_table
+        )
+
+        inserted_count = 0
+        prepared_count = 0
+        fetched_count = 0
+        skipped_count = 0
+        skipped_existing = 0
+        dynamic_user_count = 0
+        dynamic_issuer_count = 0
+        dynamic_institution_count = 0
+        row_error_count = 0
+
+        last_source_id = 0
+        remaining_limit = self.config.get("limit")
+
+        if remaining_limit:
+
+            remaining_limit = int(
+                remaining_limit
             )
 
-        with self.source_engine.connect() as source_conn:
+        while True:
 
-            rows = source_conn.execute(
-                query
-            ).fetchall()
+            fetch_size = batch_size
+
+            if remaining_limit is not None:
+
+                if remaining_limit <= 0:
+
+                    break
+
+                fetch_size = min(
+                    fetch_size,
+                    remaining_limit
+                )
+
+            with self.source_engine.connect() as source_conn:
+
+                rows = source_conn.execute(
+                    select(
+                        badge_table
+                    )
+                    .where(
+                        badge_table.c.id > last_source_id
+                    )
+                    .order_by(
+                        badge_table.c.id
+                    )
+                    .limit(
+                        fetch_size
+                    )
+                ).fetchall()
 
             if not rows:
 
-                logger.warning(
-                    "No badge records found"
-                )
+                break
 
-                return 0
-
-            logger.info(
-                f"Found {len(rows)} "
-                f"badge records"
+            fetched_count += len(
+                rows
             )
 
-            insert_data = []
+            if remaining_limit is not None:
 
+                remaining_limit -= len(
+                    rows
+                )
+
+            chunk_context = self._build_chunk_context(
+                rows,
+                badge_table,
+                source_student_table,
+                source_user_table
+            )
+
+            badge_insert_data = []
             badge_info_insert_data = []
-
             credentials_insert_data = []
 
-            # -------------------------------------------------
-            # PROCESS ROWS
-            # -------------------------------------------------
+            for row in rows:
 
-            for index, row in enumerate(
-                rows,
-                start=1
-            ):
+                row_dict = row._mapping
+                source_badge_id = self._get_source_value(
+                    row_dict,
+                    badge_table,
+                    "id"
+                )
+                last_source_id = source_badge_id
 
                 try:
 
-                    logger.info(
-                        f"Processing row "
-                        f"{index}"
+                    credential_path = self._badge_pdf_path(
+                        source_badge_id
                     )
 
-                    row_dict = row._mapping
+                    if credential_path in existing_credential_paths:
 
-                    source_badge_id = self._get_source_value(
+                        skipped_count += 1
+                        skipped_existing += 1
+
+                        continue
+
+                    source_student_id = self._get_source_value(
                         row_dict,
                         badge_table,
-                        "id"
+                        "student_id"
                     )
 
-                    # -------------------------------------------------
-                    # SOURCE USER / STUDENT IDS
-                    # -------------------------------------------------
-
-                    source_gl_user_id = self._get_source_value(
-                        row_dict,
-                        badge_table,
-                        "user_id"
+                    source_gl_student = chunk_context[
+                        "students"
+                    ].get(
+                        source_student_id
                     )
 
-                    source_student_id = row_dict.get(
-                        badge_table.c.student_id
-                    ) if "student_id" in badge_table.c else None
-
-                    logger.info(
-                        f"Source user_id: "
-                        f"{source_gl_user_id}, "
-                        f"Source student_id: "
-                        f"{source_student_id}"
-                    )
-
-                    if not source_gl_user_id and not source_student_id:
-
-                        logger.warning(
-                            "user_id and student_id are null"
+                    source_user_id = (
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "user_id"
                         )
-
-                        continue
-
-                    # -------------------------------------------------
-                    # FETCH gl_student
-                    # -------------------------------------------------
-
-                    source_gl_student = None
-
-                    if source_student_id:
-
-                        source_gl_student = (
-                            self.fetch_one_by_column(
-
-                                self.source_engine,
-
-                                "gl_student",
-
-                                "id",
-
-                                source_student_id
-                            )
-                        )
-
-                    if source_student_id and not source_gl_student:
-
-                        logger.warning(
-                            f"No gl_student found "
-                            f"for student_id: "
-                            f"{source_student_id}"
-                        )
-
-                        continue
-
-                    if source_gl_student and not source_gl_user_id:
-
-                        source_gl_user_id = (
-                            source_gl_student.get(
-                                "user_id"
-                            )
-                        )
-
-                    logger.info(
-                        f"gl_user.id: "
-                        f"{source_gl_user_id}"
-                    )
-
-                    if not source_gl_user_id:
-
-                        logger.warning(
-                            "gl_student.user_id is null"
-                        )
-
-                        continue
-
-                    # -------------------------------------------------
-                    # FETCH SOURCE gl_user
-                    # -------------------------------------------------
-
-                    source_gl_user = (
-                        self.fetch_one_by_column(
-
-                            self.source_engine,
-
-                            "gl_user",
-
-                            "id",
-
-                            source_gl_user_id
+                        or
+                        (
+                            source_gl_student.get("user_id")
+                            if source_gl_student
+                            else None
                         )
                     )
 
-                    if not source_gl_user:
-
-                        logger.warning(
-                            f"No gl_user found "
-                            f"for id: "
-                            f"{source_gl_user_id}"
-                        )
-
-                        continue
-
-                    # -------------------------------------------------
-                    # SOURCE USERNAME
-                    # -------------------------------------------------
+                    source_user = chunk_context[
+                        "users"
+                    ].get(
+                        source_user_id
+                    )
 
                     source_username = (
-                        source_gl_user.get(
-                            "username"
-                        )
+                        source_user.get("username")
+                        if source_user
+                        else None
                     )
-
-                    logger.info(
-                        f"Source username: "
-                        f"{source_username}"
-                    )
-
-                    if not source_username:
-
-                        logger.warning(
-                            "username is null"
-                        )
-
-                        continue
-
-                    if not source_gl_student:
-
-                        source_gl_student = (
-                            self.fetch_one_by_column(
-
-                                self.source_engine,
-
-                                "gl_student",
-
-                                "user_id",
-
-                                source_gl_user_id
-                            )
-                        )
-
-                        if source_gl_student and not source_student_id:
-
-                            source_student_id = (
-                                source_gl_student.get(
-                                    "id"
-                                )
-                            )
-
-                    # -------------------------------------------------
-                    # FETCH DEST USERS TABLE
-                    # -------------------------------------------------
-
-                    dest_user = (
-                        self.fetch_one_by_column(
-
-                            auth_db_engine,
-
-                            "users",
-
-                            "user_name",
-
-                            source_username
-                        )
-                    )
-
-                    if not dest_user:
-
-                        logger.warning(
-                            f"No destination user "
-                            f"found for username: "
-                            f"{source_username}"
-                        )
-
-                        continue
 
                     destination_user_uuid = (
-                        dest_user.get(
-                            "uuid"
+                        destination_user_lookup.get(
+                            self._normalize(source_username)
                         )
+                        if source_username
+                        else None
                     )
 
-                    logger.info(
-                        f"Destination user UUID: "
-                        f"{destination_user_uuid}"
-                    )
+                    if not destination_user_uuid:
 
-                    # -------------------------------------------------
-                    # FETCH USER INSTITUTION
-                    # -------------------------------------------------
+                        destination_user_uuid = self.DYNAMIC_VALUE
+                        dynamic_user_count += 1
 
-                    user_institution = (
-                        self.fetch_one_by_column(
-
-                            auth_db_engine,
-
-                            "user_institution",
-
-                            "user_uuid",
-
-                            destination_user_uuid
+                    issuer_source_user = chunk_context[
+                        "users"
+                    ].get(
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "issuer_id"
                         )
                     )
-
-                    if not user_institution:
-
-                        logger.warning(
-                            f"No institution mapping "
-                            f"found for user UUID: "
-                            f"{destination_user_uuid}"
-                        )
-
-                        continue
-
-                    institution_uuid = (
-                        user_institution.get(
-                            "institution_uuid"
-                        )
-                    )
-
-                    if not institution_uuid:
-
-                        logger.warning(
-                            f"institution_uuid is null "
-                            f"for user UUID: "
-                            f"{destination_user_uuid}"
-                        )
-
-                        continue
-
-                    logger.info(
-                        f"Institution UUID: "
-                        f"{institution_uuid}"
-                    )
-
-                    # -------------------------------------------------
-                    # FETCH INSTITUTION NAME
-                    # -------------------------------------------------
-
-                    institution_row = (
-                        self.fetch_one_by_column(
-
-                            auth_db_engine,
-
-                            "institutions",
-
-                            "uuid",
-
-                            institution_uuid
-                        )
-                    )
-
-                    issuer_name = None
-
-                    if institution_row:
-
-                        issuer_name = institution_row.get(
-                            "name"
-                        )
-
-                    logger.info(
-                        f"Issuer institution name: "
-                        f"{issuer_name}"
-                    )
-
-                    # -------------------------------------------------
-                    # CREATED_BY LOGIC
-                    # -------------------------------------------------
-
-                    issuer_id = row_dict.get(
-                        badge_table.c.issuer_id
-                    )
-
-                    logger.info(
-                        f"Issuer ID: "
-                        f"{issuer_id}"
-                    )
-
-                    if not issuer_id:
-
-                        logger.warning(
-                            "issuer_id is null. "
-                            "Skipping record."
-                        )
-
-                        continue
-
-                    created_by_uuid = None
-
-                    issuer_gl_user = (
-                        self.fetch_one_by_column(
-
-                            self.source_engine,
-
-                            "gl_user",
-
-                            "id",
-
-                            issuer_id
-                        )
-                    )
-
-                    if not issuer_gl_user:
-
-                        logger.warning(
-                            f"No gl_user found "
-                            f"for issuer_id: "
-                            f"{issuer_id}"
-                        )
-
-                        continue
 
                     issuer_username = (
-                        issuer_gl_user.get(
-                            "username"
-                        )
+                        issuer_source_user.get("username")
+                        if issuer_source_user
+                        else None
                     )
-
-                    logger.info(
-                        f"Issuer username: "
-                        f"{issuer_username}"
-                    )
-
-                    if not issuer_username:
-
-                        logger.warning(
-                            "issuer_username is null. "
-                            "Skipping record."
-                        )
-
-                        continue
-
-                    issuer_dest_user = (
-                        self.fetch_one_by_column(
-
-                            auth_db_engine,
-
-                            "users",
-
-                            "user_name",
-
-                            issuer_username
-                        )
-                    )
-
-                    if not issuer_dest_user:
-
-                        logger.warning(
-                            f"No destination user found "
-                            f"for issuer username: "
-                            f"{issuer_username}"
-                        )
-
-                        continue
 
                     created_by_uuid = (
-                        issuer_dest_user.get(
-                            "uuid"
+                        destination_user_lookup.get(
+                            self._normalize(issuer_username)
                         )
-                    )
-
-                    logger.info(
-                        f"Created by UUID: "
-                        f"{created_by_uuid}"
+                        if issuer_username
+                        else None
                     )
 
                     if not created_by_uuid:
 
-                        logger.warning(
-                            "created_by_uuid is null. "
-                            "Skipping record."
-                        )
+                        created_by_uuid = self.DYNAMIC_VALUE
+                        dynamic_issuer_count += 1
 
-                        continue
-
-                    # -------------------------------------------------
-                    # ENROLLMENT CODE LOGIC
-                    # -------------------------------------------------
-
-                    enrollment_code = None
-
-                    source_enrollment = None
-
-                    if source_student_id:
-
-                        source_enrollment = (
-                            self.fetch_one_by_column(
-
-                                self.source_engine,
-
-                                "enrollment",
-
-                                "student_id",
-
-                                source_student_id
-                            )
-                        )
-
-                    if source_enrollment:
-
-                        source_enrollment_code = (
-                            source_enrollment.get(
-                                "enrollment_UUID"
-                            )
-                            or
-                            source_enrollment.get(
-                                "enrollment_code"
-                            )
-                        )
-
-                        logger.info(
-                            f"Source enrollment_code: "
-                            f"{source_enrollment_code}"
-                        )
-
-                        enrollment_code = (
-                            source_enrollment_code
-                        )
-
-                    logger.info(
-                        f"Final enrollment_code: "
-                        f"{enrollment_code}"
+                    institution_uuid = user_institution_lookup.get(
+                        destination_user_uuid
                     )
 
-                    if not enrollment_code:
+                    if not institution_uuid:
 
-                        destination_enrollment = (
-                            self.fetch_one_by_column(
+                        institution_uuid = self.DYNAMIC_VALUE
+                        dynamic_institution_count += 1
 
-                                auth_db_engine,
+                    institution_name = institution_name_by_uuid.get(
+                        institution_uuid
+                    )
 
-                                "user_enrollments",
-
-                                "user_uuid",
-
-                                destination_user_uuid
-                            )
-                        )
-
-                        if destination_enrollment:
-
-                            enrollment_code = (
-                                destination_enrollment.get(
-                                    "enrollment_code"
-                                )
-                                or
-                                ""
-                            )
-
-                    if enrollment_code is None:
-
-                        enrollment_code = ""
-
-                    # -------------------------------------------------
-                    # IMAGE PATH
-                    # -------------------------------------------------
-
-                    image_path = self._get_source_value(
+                    source_image = self._get_source_value(
                         row_dict,
                         badge_table,
                         "image"
                     )
 
-                    pdf_path = self._build_badge_s3_url(
-                        (
-                            f"badges/"
-                            f"{source_badge_id}/"
-                            f"pdf_badge"
-                        )
-                    )
-
-                    # -------------------------------------------------
-                    # FILE NAME
-                    # -------------------------------------------------
-
                     file_name = (
-                        self._extract_file_name(
-                            image_path
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "badge_file_name"
                         )
+                        or
+                        self._extract_file_name(source_image)
                     )
 
-                    # -------------------------------------------------
-                    # FILE TYPE
-                    # -------------------------------------------------
-
-                    file_type = (
-                        self._get_file_type(
-                            file_name
-                        )
+                    file_type = self._get_file_type(
+                        file_name
                     )
 
-                    # -------------------------------------------------
-                    # CREATED DATE
-                    # -------------------------------------------------
+                    created_at = (
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "issued_on"
+                        )
+                        or
+                        datetime.utcnow()
+                    )
 
-                    created_at = self._get_source_value(
+                    badge_uuid = self._badge_uuid(
+                        source_badge_id
+                    )
+
+                    enrollment_code = self._get_enrollment_code(
                         row_dict,
                         badge_table,
-                        "issued_on",
-                        "created_at",
-                        "created_date"
+                        source_badge_id,
+                        destination_user_uuid,
+                        user_enrollment_lookup
                     )
 
-                    # -------------------------------------------------
-                    # GENERATED BADGE UUID
-                    # -------------------------------------------------
-
-                    badge_uuid = str(
-                        uuid.uuid4()
+                    status = self._map_status(
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "active"
+                        ),
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "revoked"
+                        )
                     )
 
-                    # -------------------------------------------------
-                    # MAIN BADGE TABLE
-                    # -------------------------------------------------
-
-                    mapped_row = {
-
-                        'uuid': badge_uuid,
-
-                        'created_at': created_at,
-
-                        'updated_at': created_at,
-
-                        'user_id':
-                            destination_user_uuid,
-
-                        'institution_id':
-                            institution_uuid,
-
-                        'created_by':
-                            created_by_uuid,
-
-                        'updated_by':
-                            created_by_uuid,
-
-                        'file_path':
-                            image_path,
-
-                        'file_name':
-                            file_name,
-
-                        'file_type':
-                            file_type,
-
-                        'badge_json':
+                    issuer_name = (
+                        self._issuer_name_from_details(
                             self._get_source_value(
                                 row_dict,
                                 badge_table,
-                                "assertion_json"
-                            ),
-
-                        'credential_type': 3,
-
-                        'status': 2,
-
-                        'enrollment_code':
-                            enrollment_code,
-                    }
-
-                    logger.info(
-                        f"Mapped row: "
-                        f"{mapped_row}"
+                                "badge_issuer_details"
+                            )
+                        )
+                        or
+                        institution_name
                     )
 
-                    insert_data.append(
+                    assertion_json = self._get_source_value(
+                        row_dict,
+                        badge_table,
+                        "assertion_json"
+                    )
+
+                    badge_row = {
+                        "uuid": badge_uuid,
+                        "created_at": created_at,
+                        "updated_at": created_at,
+                        "deleted_at": None,
+                        "user_id": destination_user_uuid,
+                        "institution_id": institution_uuid,
+                        "file_path": credential_path,
+                        "file_name": file_name,
+                        "file_type": file_type,
+                        "badge_json": self._badge_json_value(
+                            assertion_json
+                        ),
+                        "status": status,
+                        "credential_path": credential_path,
+                        "credential_type": self.CREDENTIAL_TYPE,
+                        "created_by": created_by_uuid,
+                        "updated_by": created_by_uuid,
+                        "deleted_by": None,
+                        "enrollment_code": enrollment_code,
+                        "generated_on": None,
+                    }
+
+                    badge_insert_data.append(
                         self._filter_to_table_columns(
-                            mapped_row,
-                            dest_table
+                            badge_row,
+                            badges_table
                         )
                     )
 
-                    # -------------------------------------------------
-                    # BADGE INFO TABLE
-                    # -------------------------------------------------
-
                     badge_info_row = {
-
-                        'uuid': str(
-                            uuid.uuid4()
+                        "uuid": self._badge_info_uuid(
+                            source_badge_id
                         ),
-
-                        'created_at': created_at,
-
-                        'updated_at': created_at,
-
-                        'badge_id': badge_uuid,
-
-                        'badgeId': badge_uuid,
-
-                        'badge_name': self._get_source_value(
+                        "created_at": created_at,
+                        "updated_at": created_at,
+                        "deleted_at": None,
+                        "badge_id": badge_uuid,
+                        "badgeId": badge_uuid,
+                        "badge_name": self._get_source_value(
                             row_dict,
                             badge_table,
                             "badge_name"
                         ),
-
-                        'badge_description': self._get_source_value(
+                        "badge_description": self._get_source_value(
                             row_dict,
                             badge_table,
                             "description"
                         ),
-
-                        'earning_criteria': self._get_source_value(
+                        "earning_criteria": self._get_source_value(
                             row_dict,
                             badge_table,
                             "criteria"
                         ),
-
-                        'issuer_name': issuer_name,
-
-                        'expires_on': self._get_source_value(
+                        "issuer_name": issuer_name,
+                        "expires_on": self._get_source_value(
                             row_dict,
                             badge_table,
                             "expires"
                         ),
-
-                        'badge_image_url': image_path,
-
-                        'pdf_path': pdf_path,
+                        "badge_image_url": source_image,
+                        "pdf_path": credential_path,
+                        "generated_on": None,
                     }
-
-                    logger.info(
-                        f"Badge info row: "
-                        f"{badge_info_row}"
-                    )
 
                     badge_info_insert_data.append(
                         self._filter_to_table_columns(
@@ -828,74 +503,103 @@ class DigitalBadgesMigrator(BaseMigrator):
                         )
                     )
 
-                    # -------------------------------------------------
-                    # CREDENTIALS TABLE
-                    # -------------------------------------------------
+                    student_number = None
+                    student_first_name = None
+                    student_last_name = None
+                    student_date_of_birth = None
+
+                    if source_gl_student:
+
+                        student_number = (
+                            source_gl_student.get("school_student_id")
+                            or
+                            source_gl_student.get("student_number")
+                            or
+                            source_student_id
+                        )
+                        student_first_name = source_gl_student.get(
+                            "first_name"
+                        )
+                        student_last_name = source_gl_student.get(
+                            "last_name"
+                        )
+                        student_date_of_birth = source_gl_student.get(
+                            "date_of_birth"
+                        )
 
                     credentials_row = {
-
-                        'uuid': str(
-                            uuid.uuid4()
+                        "uuid": str(uuid.uuid4()),
+                        "created_at": created_at,
+                        "updated_at": created_at,
+                        "deleted_at": None,
+                        "user_id": destination_user_uuid,
+                        "student_user_name": (
+                            source_username
+                            or
+                            self._fallback_student_user_name(
+                                row_dict,
+                                badge_table,
+                                source_student_id
+                            )
                         ),
-
-                        'created_at': created_at,
-
-                        'updated_at': created_at,
-
-                        'user_id':
-                            destination_user_uuid,
-
-                        'student_user_name':
-                            source_username,
-
-                        'institution_name':
-                            issuer_name,
-
-                        'student_id':
-                            (
-                                str(source_student_id)
-                                if source_student_id is not None
-                                else None
-                            ),
-
-                        'student_email':
-                            source_username,
-
-                        'credential_claim_status': 0,
-
-                        'is_registered': 1,
-
-                        'institution_id':
-                            institution_uuid,
-
-                        'status': 2,
-
-                        'credential_type': 3,
-
-                        'credential_path': pdf_path,
-
-                        'enrollment_code':
-                            enrollment_code,
-
-                        'created_by':
-                            created_by_uuid,
-
-                        'updated_by':
-                            created_by_uuid,
-
-                        'digital_badges':
-                            badge_uuid,
-
-                        'issued_on':
-                            str(created_at),
-
-                        'badge_image':
-                            image_path,
+                        "student_first_name": student_first_name,
+                        "student_last_name": student_last_name,
+                        "institution_name": institution_name,
+                        "student_id": (
+                            str(student_number)
+                            if student_number is not None
+                            else None
+                        ),
+                        "student_email": (
+                            source_username
+                            or
+                            self._get_source_value(
+                                row_dict,
+                                badge_table,
+                                "email"
+                            )
+                        ),
+                        "date_of_birth": (
+                            str(student_date_of_birth)
+                            if student_date_of_birth is not None
+                            else None
+                        ),
+                        "credential_claim_status": (
+                            self.CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED
+                        ),
+                        "is_registered": 1,
+                        "institution_id": institution_uuid,
+                        "status": status,
+                        "credential_type": self.CREDENTIAL_TYPE,
+                        "credential_path": credential_path,
+                        "enrollment_code": enrollment_code,
+                        "created_by": created_by_uuid,
+                        "updated_by": created_by_uuid,
+                        "deleted_by": None,
+                        "digital_badges": badge_uuid,
+                        "generated_on": None,
+                        "issued_on": (
+                            str(created_at)
+                            if created_at is not None
+                            else None
+                        ),
+                        "student_number": (
+                            str(student_number)
+                            if student_number is not None
+                            else None
+                        ),
+                        "badge_image": source_image,
                     }
 
-                    logger.info(
-                        f"Credentials row: "
-                        f"{credentials_row}"
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "blockchain_hash",
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "blockchain_hash"
+                        )
                     )
 
                     credentials_insert_data.append(
@@ -905,105 +609,646 @@ class DigitalBadgesMigrator(BaseMigrator):
                         )
                     )
 
-                except Exception as e:
+                    existing_credential_paths.add(
+                        credential_path
+                    )
+
+                except Exception as error:
+
+                    skipped_count += 1
+                    row_error_count += 1
 
                     logger.exception(
-                        f"Failed processing "
-                        f"row {index}: {e}"
+                        "Failed processing badge source id "
+                        f"{source_badge_id}: {error}"
                     )
 
-            # -------------------------------------------------
-            # INSERT DATA
-            # -------------------------------------------------
-
-            if insert_data:
+            if not badge_insert_data:
 
                 logger.info(
-                    f"Prepared "
-                    f"{len(insert_data)} "
-                    f"records for insertion"
+                    "Digital badge chunk fetched "
+                    f"{len(rows)} rows through source id "
+                    f"{last_source_id}; nothing to insert."
                 )
 
-                with self.dest_engine.begin() as dest_conn:
+                continue
 
-                    # -----------------------------------------
-                    # INSERT DIGITAL BADGES
-                    # -----------------------------------------
-
-                    result = dest_conn.execute(
-
-                        insert(dest_table),
-
-                        insert_data
-                    )
-
-                    logger.info(
-                        f"Inserted digital badge rows: "
-                        f"{result.rowcount}"
-                    )
-
-                    # -----------------------------------------
-                    # INSERT BADGE INFO
-                    # -----------------------------------------
-
-                    if badge_info_insert_data:
-
-                        badge_info_result = dest_conn.execute(
-
-                            insert(badge_info_table),
-
-                            badge_info_insert_data
-                        )
-
-                        logger.info(
-                            f"Inserted badge info rows: "
-                            f"{badge_info_result.rowcount}"
-                        )
-
-                    # -----------------------------------------
-                    # INSERT CREDENTIALS
-                    # -----------------------------------------
-
-                    if credentials_insert_data:
-
-                        credentials_result = dest_conn.execute(
-
-                            insert(credentials_table),
-
-                            credentials_insert_data
-                        )
-
-                        logger.info(
-                            f"Inserted credentials rows: "
-                            f"{credentials_result.rowcount}"
-                        )
-
-                logger.info(
-                    "======================================"
-                )
-
-                logger.info(
-                    f"Successfully migrated "
-                    f"{len(insert_data)} "
-                    f"digital badges"
-                )
-
-                logger.info(
-                    "======================================"
-                )
-
-                return len(insert_data)
-
-            logger.warning(
-                "No valid records "
-                "available for insertion"
+            logger.info(
+                "Inserting digital badge chunk: "
+                f"prepared={len(badge_insert_data)}, "
+                f"source_id_through={last_source_id}, "
+                f"total_fetched={fetched_count}"
             )
 
-            return 0
+            with self.dest_engine.begin() as dest_conn:
 
-    # -------------------------------------------------
-    # EXTRACT FILE NAME
-    # -------------------------------------------------
+                badge_result = dest_conn.execute(
+                    insert(badges_table),
+                    badge_insert_data
+                )
+
+                badge_info_result = dest_conn.execute(
+                    insert(badge_info_table),
+                    badge_info_insert_data
+                )
+
+                credentials_result = dest_conn.execute(
+                    insert(credentials_table),
+                    credentials_insert_data
+                )
+
+            inserted_now = badge_result.rowcount or len(
+                badge_insert_data
+            )
+
+            inserted_count += inserted_now
+            prepared_count += len(
+                badge_insert_data
+            )
+
+            logger.info(
+                "Digital badge chunk inserted: "
+                f"badges={inserted_now}, "
+                f"badge_info="
+                f"{badge_info_result.rowcount or len(badge_info_insert_data)}, "
+                f"credentials_all="
+                f"{credentials_result.rowcount or len(credentials_insert_data)}, "
+                f"inserted_total={inserted_count}"
+            )
+
+        if not prepared_count:
+
+            logger.warning(
+                "No valid digital badge records available for insertion"
+            )
+
+        logger.info(
+            "Digital Badges Migration summary: "
+            f"inserted={inserted_count}, "
+            f"prepared={prepared_count}, "
+            f"fetched={fetched_count}, "
+            f"skipped={skipped_count}, "
+            f"skipped_existing={skipped_existing}, "
+            f"dynamic_user={dynamic_user_count}, "
+            f"dynamic_issuer={dynamic_issuer_count}, "
+            f"dynamic_institution={dynamic_institution_count}, "
+            f"row_errors={row_error_count}"
+        )
+
+        return inserted_count
+
+    def _get_batch_size(self):
+
+        batch_size = int(
+            self.config.get(
+                "digital_badges_migration_batch_size",
+                self.config.get(
+                    "batch_size",
+                    self.DEFAULT_BATCH_SIZE
+                )
+            )
+        )
+
+        if batch_size < 1:
+
+            batch_size = self.DEFAULT_BATCH_SIZE
+
+        return min(
+            batch_size,
+            self.MAX_BATCH_SIZE
+        )
+
+    def _build_chunk_context(
+        self,
+        rows,
+        badge_table,
+        source_student_table,
+        source_user_table
+    ):
+
+        student_ids = set()
+        user_ids = set()
+
+        for row in rows:
+
+            row_dict = row._mapping
+
+            student_id = self._get_source_value(
+                row_dict,
+                badge_table,
+                "student_id"
+            )
+            user_id = self._get_source_value(
+                row_dict,
+                badge_table,
+                "user_id"
+            )
+            issuer_id = self._get_source_value(
+                row_dict,
+                badge_table,
+                "issuer_id"
+            )
+
+            if student_id:
+
+                student_ids.add(
+                    student_id
+                )
+
+            if user_id:
+
+                user_ids.add(
+                    user_id
+                )
+
+            if issuer_id:
+
+                user_ids.add(
+                    issuer_id
+                )
+
+        students = self._fetch_lookup_by_ids(
+            self.source_engine,
+            source_student_table,
+            source_student_table.c.id,
+            student_ids
+        )
+
+        for student in students.values():
+
+            student_user_id = student.get(
+                "user_id"
+            )
+
+            if student_user_id:
+
+                user_ids.add(
+                    student_user_id
+                )
+
+        users = self._fetch_lookup_by_ids(
+            self.source_engine,
+            source_user_table,
+            source_user_table.c.id,
+            user_ids
+        )
+
+        return {
+            "students": students,
+            "users": users,
+        }
+
+    def _fetch_lookup_by_ids(
+        self,
+        engine,
+        table,
+        id_column,
+        ids
+    ):
+
+        if not ids:
+
+            return {}
+
+        with engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    table
+                ).where(
+                    id_column.in_(
+                        list(ids)
+                    )
+                )
+            ).fetchall()
+
+        return {
+            row._mapping.get(id_column): dict(row._mapping)
+            for row in rows
+        }
+
+    def _build_destination_user_lookup(
+        self,
+        users_table,
+        auth_db_engine
+    ):
+
+        lookup = {}
+        selected_columns = [
+            users_table.c.uuid
+        ]
+
+        for column_name in [
+            "user_name",
+            "email"
+        ]:
+
+            if column_name in users_table.c:
+
+                selected_columns.append(
+                    users_table.c[column_name]
+                )
+
+        with auth_db_engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    *selected_columns
+                )
+            ).fetchall()
+
+        for row in rows:
+
+            row_map = row._mapping
+            user_uuid = row_map.get(
+                users_table.c.uuid
+            )
+
+            for column_name in [
+                "user_name",
+                "email"
+            ]:
+
+                if column_name not in users_table.c:
+
+                    continue
+
+                value = row_map.get(
+                    users_table.c[column_name]
+                )
+
+                if value:
+
+                    lookup[
+                        self._normalize(value)
+                    ] = user_uuid
+
+        logger.info(
+            f"Built {len(lookup)} digital badge user lookups"
+        )
+
+        return lookup
+
+    def _build_user_institution_lookup(
+        self,
+        user_institution_table,
+        auth_db_engine
+    ):
+
+        lookup = {}
+
+        with auth_db_engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    user_institution_table.c.user_uuid,
+                    user_institution_table.c.institution_uuid
+                )
+            ).fetchall()
+
+        for row in rows:
+
+            row_map = row._mapping
+            user_uuid = row_map.get(
+                user_institution_table.c.user_uuid
+            )
+            institution_uuid = row_map.get(
+                user_institution_table.c.institution_uuid
+            )
+
+            if user_uuid and institution_uuid and user_uuid not in lookup:
+
+                lookup[
+                    user_uuid
+                ] = institution_uuid
+
+        return lookup
+
+    def _build_user_enrollment_lookup(
+        self,
+        user_enrollments_table,
+        auth_db_engine
+    ):
+
+        lookup = {}
+
+        if (
+            "user_uuid" not in user_enrollments_table.c
+            or
+            "enrollment_code" not in user_enrollments_table.c
+        ):
+
+            return lookup
+
+        with auth_db_engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    user_enrollments_table.c.user_uuid,
+                    user_enrollments_table.c.enrollment_code
+                )
+            ).fetchall()
+
+        for row in rows:
+
+            row_map = row._mapping
+            user_uuid = row_map.get(
+                user_enrollments_table.c.user_uuid
+            )
+            enrollment_code = row_map.get(
+                user_enrollments_table.c.enrollment_code
+            )
+
+            if user_uuid and enrollment_code and user_uuid not in lookup:
+
+                lookup[
+                    user_uuid
+                ] = enrollment_code
+
+        return lookup
+
+    def _build_institution_name_lookup(
+        self,
+        institutions_table,
+        auth_db_engine
+    ):
+
+        lookup = {}
+
+        with auth_db_engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    institutions_table.c.uuid,
+                    institutions_table.c.name
+                )
+            ).fetchall()
+
+        for row in rows:
+
+            row_map = row._mapping
+            institution_uuid = row_map.get(
+                institutions_table.c.uuid
+            )
+            name = row_map.get(
+                institutions_table.c.name
+            )
+
+            if institution_uuid:
+
+                lookup[
+                    institution_uuid
+                ] = name
+
+        return lookup
+
+    def _load_existing_credential_paths(
+        self,
+        badges_table,
+        credentials_table
+    ):
+
+        existing_paths = set()
+
+        with self.dest_engine.connect() as conn:
+
+            if "credential_path" in badges_table.c:
+
+                rows = conn.execute(
+                    select(
+                        badges_table.c.credential_path
+                    )
+                ).fetchall()
+
+                for row in rows:
+
+                    credential_path = row._mapping.get(
+                        badges_table.c.credential_path
+                    )
+
+                    if credential_path:
+
+                        existing_paths.add(
+                            credential_path
+                        )
+
+            if "credential_path" in credentials_table.c:
+
+                rows = conn.execute(
+                    select(
+                        credentials_table.c.credential_path
+                    ).where(
+                        credentials_table.c.credential_type
+                        == self.CREDENTIAL_TYPE
+                    )
+                ).fetchall()
+
+                for row in rows:
+
+                    credential_path = row._mapping.get(
+                        credentials_table.c.credential_path
+                    )
+
+                    if credential_path:
+
+                        existing_paths.add(
+                            credential_path
+                        )
+
+        return existing_paths
+
+    def _get_enrollment_code(
+        self,
+        row_dict,
+        badge_table,
+        source_badge_id,
+        destination_user_uuid,
+        user_enrollment_lookup
+    ):
+
+        if destination_user_uuid != self.DYNAMIC_VALUE:
+
+            return (
+                user_enrollment_lookup.get(
+                    destination_user_uuid
+                )
+                or
+                ""
+            )
+
+        badge_id = self._get_source_value(
+            row_dict,
+            badge_table,
+            "badge_id",
+            "id"
+        )
+
+        return (
+            str(badge_id)
+            if badge_id is not None
+            else
+            str(source_badge_id)
+        )
+
+    def _badge_uuid(
+        self,
+        source_badge_id
+    ):
+
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"gll:badge:{source_badge_id}"
+            )
+        )
+
+    def _badge_info_uuid(
+        self,
+        source_badge_id
+    ):
+
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"gll:badge-info:{source_badge_id}"
+            )
+        )
+
+    def _badge_pdf_path(
+        self,
+        source_badge_id
+    ):
+
+        return (
+            f"{self.S3_BASE_URL}/badges/{source_badge_id}/pdf_badge"
+        )
+
+    def _fallback_student_user_name(
+        self,
+        row_dict,
+        badge_table,
+        source_student_id
+    ):
+
+        if source_student_id:
+
+            return str(
+                source_student_id
+            )
+
+        email = self._get_source_value(
+            row_dict,
+            badge_table,
+            "email"
+        )
+
+        if email:
+
+            return str(
+                email
+            )
+
+        source_badge_id = self._get_source_value(
+            row_dict,
+            badge_table,
+            "id"
+        )
+
+        return f"badge-{source_badge_id}"
+
+    def _issuer_name_from_details(
+        self,
+        value
+    ):
+
+        parsed = self._json_value(
+            value
+        )
+
+        if isinstance(parsed, dict):
+
+            return (
+                parsed.get("name")
+                or
+                parsed.get("issuer_name")
+            )
+
+        return None
+
+    def _json_value(
+        self,
+        value
+    ):
+
+        if value is None:
+
+            return None
+
+        if isinstance(value, dict):
+
+            return value
+
+        text = str(value).strip()
+
+        if not text:
+
+            return None
+
+        try:
+
+            return json.loads(
+                text
+            )
+
+        except Exception:
+
+            return None
+
+    def _badge_json_value(
+        self,
+        assertion_json
+    ):
+
+        return self._json_value(
+            assertion_json
+        )
+
+    def _map_status(
+        self,
+        active,
+        revoked
+    ):
+
+        if self._is_truthy(revoked):
+
+            return 1
+
+        if active is None:
+
+            return 2
+
+        return 2 if self._is_truthy(active) else 1
+
+    def _is_truthy(
+        self,
+        value
+    ):
+
+        if isinstance(value, bool):
+
+            return value
+
+        if isinstance(value, bytes):
+
+            return value == b"\x01"
+
+        return str(value).strip().lower() in [
+            "1",
+            "true",
+            "yes",
+            "y",
+            "\\x01",
+        ]
 
     def _get_source_value(
         self,
@@ -1038,27 +1283,22 @@ class DigitalBadgesMigrator(BaseMigrator):
             if column_name in table.c
         }
 
-    # -------------------------------------------------
-    # BUILD BADGE S3 URL
-    # -------------------------------------------------
-
-    def _build_badge_s3_url(
+    def _set_if_column(
         self,
-        key: str
-    ) -> str:
+        row,
+        table,
+        column_name,
+        value
+    ):
 
-        clean_key = str(key).lstrip("/")
+        if column_name in table.c:
 
-        return (
-            f"https://{self.BADGE_S3_BUCKET}"
-            f".s3.{self.BADGE_S3_REGION}"
-            f".amazonaws.com/{clean_key}"
-        )
+            row[column_name] = value
 
     def _extract_file_name(
         self,
-        file_path: str
-    ) -> str:
+        file_path
+    ):
 
         if not file_path:
 
@@ -1066,7 +1306,9 @@ class DigitalBadgesMigrator(BaseMigrator):
 
         try:
 
-            parsed = urlparse(file_path)
+            parsed = urlparse(
+                str(file_path)
+            )
 
             filename = Path(
                 parsed.path
@@ -1077,55 +1319,62 @@ class DigitalBadgesMigrator(BaseMigrator):
                 return filename
 
             return Path(
-                file_path
+                str(file_path)
             ).name
 
         except Exception:
 
             return None
 
-    # -------------------------------------------------
-    # DETECT MIME TYPE
-    # -------------------------------------------------
-
     def _get_file_type(
         self,
-        file_name: str
-    ) -> str:
+        file_name
+    ):
 
         if not file_name:
 
-            return (
-                'application/octet-stream'
-            )
+            return "application/octet-stream"
 
         ext = Path(
-            file_name
+            str(file_name)
         ).suffix.lower()
 
         mime_mapping = {
-
-            '.png': 'image/png',
-
-            '.jpg': 'image/jpeg',
-
-            '.jpeg': 'image/jpeg',
-
-            '.json': 'application/json',
-
-            '.pdf': 'application/pdf',
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".json": "application/json",
+            ".pdf": "application/pdf",
         }
 
         if ext in mime_mapping:
 
-            return mime_mapping[ext]
+            return mime_mapping[
+                ext
+            ]
 
         mime_type, _ = mimetypes.guess_type(
-            file_name
+            str(file_name)
         )
 
         return (
             mime_type
             or
-            'application/octet-stream'
+            "application/octet-stream"
+        )
+
+    def _normalize(
+        self,
+        value
+    ):
+
+        if value is None:
+
+            return ""
+
+        return (
+            str(value)
+            .strip()
+            .lower()
+            .replace(" ", "")
         )
