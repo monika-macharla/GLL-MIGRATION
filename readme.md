@@ -31,8 +31,14 @@ gl_parent_student                       parent_student
 
 12. nsapi_criteria                    scholarship_prefernces
 
+//user_campus
+//credential visibility
+
 
 2. gllreports
+17. transcript                           credentials_transcript, credentials_all
+18. certificate                          credentials_certifications, credentials_all
+
 
 13. badge                           credentials_digital_badges,(gllreports)(support gllauthservicemigration)
                                     credentials_digital_badge_info,credentials_all
@@ -40,8 +46,6 @@ gl_parent_student                       parent_student
 15. recommendation_letter,recommendation_letter_request             credentials_recommendation_letters. credentials_all
 
 16. other-credentials                    self-uploads, credentials_all
-17. transcript                           credentials_transcript, credentials_all
-18. certificate                          credentials_cerifications, credentials_all
 19. badge_shared                         credentials_shared,students_credentials_share_history
 
 
