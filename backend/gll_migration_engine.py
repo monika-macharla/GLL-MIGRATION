@@ -584,7 +584,10 @@ class GLLMigrationEngine:
                 str(
                     m.get("destination_table") or ""
                 ).strip().lower()
-                == "credentials_transcripts"
+                in [
+                    "credentials_transcripts",
+                    "credentials_transcript",
+                ]
             )
 
             for m in mappings
@@ -611,6 +614,7 @@ class GLLMigrationEngine:
                 ).strip().lower()
                 in [
                     "credentials_certifications",
+                    "credentials_cerifications",
                     "credentials_cerificate",
                     "credentials_certificate"
                 ]
