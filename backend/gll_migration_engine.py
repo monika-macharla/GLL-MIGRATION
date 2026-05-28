@@ -559,7 +559,11 @@ class GLLMigrationEngine:
                 str(
                     m.get("destination_table") or ""
                 ).strip().lower()
-                == "credentials_self_uploads"
+                in [
+                    "credentials_self_uploads",
+                    "self_uploads",
+                    "self-uploads",
+                ]
             )
 
             for m in mappings
