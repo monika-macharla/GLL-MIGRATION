@@ -305,7 +305,9 @@ async def migrate(request: MigrationRequest):
 
                 "module_permissions",
 
-                "permissions"
+                "permissions",
+
+                "import_students"
             ]
 
             or
@@ -374,6 +376,8 @@ async def migrate(request: MigrationRequest):
                 "student_credential_visibility",
 
                 "student_crdential_visibility",
+
+                "gl_student",
             ]
 
             for m in request.mappings

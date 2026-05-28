@@ -21,6 +21,7 @@ from .preferences_migrator import PreferencesMigrator
 from .ferpa_migrator import FerpaMigrator
 from .nsapi_preferences_migrator import NsapiPreferencesMigrator
 from .credential_visibility_migrator import CredentialVisibilityMigrator
+from .import_students_migrator import ImportStudentsMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator']

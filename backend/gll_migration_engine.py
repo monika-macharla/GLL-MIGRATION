@@ -51,7 +51,9 @@ from migrators import (
 
     NsapiPreferencesMigrator,
 
-    CredentialVisibilityMigrator
+    CredentialVisibilityMigrator,
+
+    ImportStudentsMigrator
 
 )
 
@@ -832,6 +834,32 @@ class GLLMigrationEngine:
 
             for m in mappings
         )
+
+        # -----------------------------------------
+        # GL_STUDENT -> IMPORT_STUDENTS MIGRATION
+        # -----------------------------------------
+
+        import_students_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "gl_student"
+            )
+
+            and
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_students"
+            )
+
+            for m in mappings
+        )
+
         # -----------------------------------------
         # Logs
         # -----------------------------------------
@@ -940,6 +968,12 @@ class GLLMigrationEngine:
             f"credential_visibility_selected="
             f"{credential_visibility_selected}"
         )
+
+        logger.info(
+            f"import_students_selected="
+            f"{import_students_selected}"
+        )
+
         # -----------------------------------------
         # Add UsersMigrator
         # -----------------------------------------
@@ -1485,6 +1519,33 @@ class GLLMigrationEngine:
                     self.config
                 )
             )
+
+        # -----------------------------------------
+        # Add ImportStudentsMigrator
+        # -----------------------------------------
+
+        if import_students_selected:
+
+            logger.info(
+                "Adding ImportStudentsMigrator"
+            )
+
+            migrators.append(
+
+                ImportStudentsMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
         # -----------------------------------------
         # No Migrators
         # -----------------------------------------
