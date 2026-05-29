@@ -24,6 +24,8 @@ from .credential_visibility_migrator import CredentialVisibilityMigrator
 from .import_students_migrator import ImportStudentsMigrator
 from .import_parents_migrator import ImportParentsMigrator
 from .hs_other_creds_migrator import HSOtherCredsMigrator
+from .hs_class_rank_gpa_migrator import HSClassRankGPAMigrator
+from .hs_course_information_migrator import HSCourseInformationMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator','HSClassRankGPAMigrator','HSCourseInformationMigrator']

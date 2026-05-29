@@ -325,7 +325,11 @@ async def migrate(request: MigrationRequest):
 
                 "import_college_aasesments",
 
-                "import_other_requirements"
+                "import_other_requirements",
+
+                "import_class_rank_gpa",
+
+                "import_course_information"
             ]
 
             or
@@ -402,6 +406,10 @@ async def migrate(request: MigrationRequest):
                 "hs_other_creds",
 
                 "hs_othser_creds",
+
+                "hs_class_rank_gpa",
+
+                "hs_course_information",
             ]
 
             for m in request.mappings

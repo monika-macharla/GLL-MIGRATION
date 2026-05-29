@@ -57,7 +57,11 @@ from migrators import (
 
     ImportParentsMigrator,
 
-    HSOtherCredsMigrator
+    HSOtherCredsMigrator,
+
+    HSClassRankGPAMigrator,
+
+    HSCourseInformationMigrator
 
 )
 
@@ -929,6 +933,56 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # HS CLASS RANK GPA IMPORT MIGRATION
+        # -----------------------------------------
+
+        hs_class_rank_gpa_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "hs_class_rank_gpa"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_class_rank_gpa"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # HS COURSE INFORMATION IMPORT MIGRATION
+        # -----------------------------------------
+
+        hs_course_information_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "hs_course_information"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_course_information"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1050,6 +1104,16 @@ class GLLMigrationEngine:
         logger.info(
             f"hs_other_creds_selected="
             f"{hs_other_creds_selected}"
+        )
+
+        logger.info(
+            f"hs_class_rank_gpa_selected="
+            f"{hs_class_rank_gpa_selected}"
+        )
+
+        logger.info(
+            f"hs_course_information_selected="
+            f"{hs_course_information_selected}"
         )
 
         # -----------------------------------------
@@ -1663,6 +1727,58 @@ class GLLMigrationEngine:
             migrators.append(
 
                 HSOtherCredsMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HSClassRankGPAMigrator
+        # -----------------------------------------
+
+        if hs_class_rank_gpa_selected:
+
+            logger.info(
+                "Adding HSClassRankGPAMigrator"
+            )
+
+            migrators.append(
+
+                HSClassRankGPAMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HSCourseInformationMigrator
+        # -----------------------------------------
+
+        if hs_course_information_selected:
+
+            logger.info(
+                "Adding HSCourseInformationMigrator"
+            )
+
+            migrators.append(
+
+                HSCourseInformationMigrator(
 
                     self,
 

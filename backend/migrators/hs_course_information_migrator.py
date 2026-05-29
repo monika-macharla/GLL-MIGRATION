@@ -11,10 +11,10 @@ from .base_migrator import BaseMigrator
 logger = logging.getLogger(__name__)
 
 
-class ImportParentsMigrator(BaseMigrator):
+class HSCourseInformationMigrator(BaseMigrator):
 
-    SOURCE_TABLE = "gl_parent"
-    DESTINATION_TABLE = "import_parents"
+    SOURCE_TABLE = "hs_course_information"
+    DESTINATION_TABLE = "import_course_information"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 20000
 
@@ -39,29 +39,23 @@ class ImportParentsMigrator(BaseMigrator):
     def migrate(self) -> int:
 
         logger.info(
-            "Starting Import Parents Migration..."
+            "Starting HS Course Information Import Migration..."
         )
 
-        parent_table = self._manual_reflect(
+        source_table = self._manual_reflect(
             self.SOURCE_TABLE,
             self.source_engine,
             self.metadata_source
         )
 
-        student_table = self._manual_reflect(
-            "gl_student",
+        hs_transcript_table = self._manual_reflect(
+            "hs_transcript",
             self.source_engine,
             self.metadata_source
         )
 
-        address_table = self._manual_reflect(
-            "address",
-            self.source_engine,
-            self.metadata_source
-        )
-
-        state_table = self._manual_reflect(
-            "state",
+        credential_table = self._manual_reflect(
+            "credential",
             self.source_engine,
             self.metadata_source
         )
@@ -74,7 +68,7 @@ class ImportParentsMigrator(BaseMigrator):
 
         source_count = self._count_rows(
             self.source_engine,
-            parent_table
+            source_table
         )
         destination_count = self._count_rows(
             self.dest_engine,
@@ -82,10 +76,11 @@ class ImportParentsMigrator(BaseMigrator):
         )
 
         logger.info(
-            f"Source gl_parent count: {source_count}"
+            f"Source hs_course_information count: "
+            f"{source_count}"
         )
         logger.info(
-            f"Destination import_parents current count: "
+            f"Destination import_course_information current count: "
             f"{destination_count}"
         )
 
@@ -103,10 +98,7 @@ class ImportParentsMigrator(BaseMigrator):
         prepared_count = 0
         inserted_count = 0
         ignored_existing = 0
-        student_number_fallbacks = 0
-        first_name_fallbacks = 0
-        last_name_fallbacks = 0
-        missing_student_links = 0
+        missing_student_number = 0
         missing_institution_id = 0
         batch_number = 0
 
@@ -127,34 +119,28 @@ class ImportParentsMigrator(BaseMigrator):
 
             query = (
                 select(
-                    parent_table,
-                    student_table,
-                    address_table,
-                    state_table
+                    source_table,
+                    hs_transcript_table,
+                    credential_table
                 )
                 .select_from(
-                    parent_table
-                    .outerjoin(
-                        student_table,
-                        parent_table.c.student_id
-                        == student_table.c.id
+                    source_table
+                    .join(
+                        hs_transcript_table,
+                        source_table.c.transcript_id
+                        == hs_transcript_table.c.id
                     )
-                    .outerjoin(
-                        address_table,
-                        parent_table.c.address_id
-                        == address_table.c.id
-                    )
-                    .outerjoin(
-                        state_table,
-                        address_table.c.state
-                        == state_table.c.id
+                    .join(
+                        credential_table,
+                        hs_transcript_table.c.credential_id
+                        == credential_table.c.id
                     )
                 )
                 .where(
-                    parent_table.c.id > last_source_id
+                    source_table.c.id > last_source_id
                 )
                 .order_by(
-                    parent_table.c.id
+                    source_table.c.id
                 )
                 .limit(
                     fetch_size
@@ -182,76 +168,29 @@ class ImportParentsMigrator(BaseMigrator):
                 )
 
             insert_data = []
+            batch_number += 1
 
             for row in rows:
 
                 row_dict = row._mapping
-                source_parent_id = row_dict.get(
-                    parent_table.c.id
+                source_id = row_dict.get(
+                    source_table.c.id
                 )
-                source_student_id = row_dict.get(
-                    parent_table.c.student_id
-                )
-                last_source_id = source_parent_id
+                last_source_id = source_id
 
-                if not source_student_id:
-
-                    missing_student_links += 1
-
-                student_number = (
-                    self._clean_string(
-                        row_dict.get(
-                            parent_table.c.student_number
-                        )
-                    )
-                    or
-                    self._clean_string(
-                        row_dict.get(
-                            student_table.c.school_student_id
-                        )
-                    )
-                    or
-                    self._clean_string(
-                        row_dict.get(
-                            student_table.c.email
-                        )
+                student_number = self._clean_string(
+                    row_dict.get(
+                        hs_transcript_table.c.stu_identification
                     )
                 )
 
                 if not student_number:
 
-                    student_number_fallbacks += 1
-                    student_number = (
-                        f"GL-STUDENT-{source_student_id}"
-                        if source_student_id
-                        else
-                        f"GL-PARENT-{source_parent_id}"
-                    )
-
-                contact_first_name = self._clean_string(
-                    row_dict.get(
-                        parent_table.c.first_name
-                    )
-                )
-
-                if not contact_first_name:
-
-                    first_name_fallbacks += 1
-                    contact_first_name = "UNKNOWN"
-
-                contact_last_name = self._clean_string(
-                    row_dict.get(
-                        parent_table.c.last_name
-                    )
-                )
-
-                if not contact_last_name:
-
-                    last_name_fallbacks += 1
-                    contact_last_name = "UNKNOWN"
+                    missing_student_number += 1
+                    student_number = f"HS-TRANSCRIPT-{row_dict.get(source_table.c.transcript_id)}"
 
                 source_institution_id = row_dict.get(
-                    student_table.c.institution_id
+                    credential_table.c.institution_id
                 )
 
                 if not source_institution_id:
@@ -259,8 +198,8 @@ class ImportParentsMigrator(BaseMigrator):
                     missing_institution_id += 1
 
                 mapped_row = {
-                    "uuid": self._import_parent_uuid(
-                        source_parent_id
+                    "uuid": self._stable_uuid(
+                        source_id
                     ),
                     "created_at": datetime.utcnow(),
                     "updated_at": datetime.utcnow(),
@@ -269,37 +208,70 @@ class ImportParentsMigrator(BaseMigrator):
                         student_number,
                         255
                     ),
-                    "contact_last_name": self._truncate(
-                        contact_last_name,
-                        255
-                    ),
-                    "contact_first_name": self._truncate(
-                        contact_first_name,
-                        255
-                    ),
-                    "contact_middle_name": self._truncate(
+                    "school_year": self._truncate(
                         row_dict.get(
-                            parent_table.c.middle_name
+                            source_table.c.school_year
+                        ),
+                        10
+                    ),
+                    "subject_area": self._truncate(
+                        row_dict.get(
+                            source_table.c.department
+                        ),
+                        50
+                    ),
+                    "course_id": self._truncate(
+                        row_dict.get(
+                            source_table.c.course_number
+                        ),
+                        50
+                    ),
+                    "course_name": self._truncate(
+                        row_dict.get(
+                            source_table.c.course_name
                         ),
                         255
                     ),
-                    "relationship_type": self._truncate(
+                    "course_short_name": self._truncate(
                         row_dict.get(
-                            parent_table.c.relationship
+                            source_table.c.course_short_name
                         ),
                         100
                     ),
-                    "contact_phone_number": self._truncate(
+                    "term_code": self._truncate(
                         row_dict.get(
-                            parent_table.c.phone_number
+                            source_table.c.store_code
                         ),
-                        20
+                        10
                     ),
-                    "contact_email": self._truncate(
+                    "explanation": self._clean_string(
                         row_dict.get(
-                            parent_table.c.email_address
+                            source_table.c.code
+                        )
+                    ),
+                    "grade_level": self._truncate(
+                        row_dict.get(
+                            source_table.c.grade_level
                         ),
-                        255
+                        10
+                    ),
+                    "semester_seq": self._truncate(
+                        row_dict.get(
+                            source_table.c.semester_seq
+                        ),
+                        10
+                    ),
+                    "credit_campus": self._truncate(
+                        row_dict.get(
+                            source_table.c.credit_campus
+                        ),
+                        50
+                    ),
+                    "pass_fail_credit": self._truncate(
+                        row_dict.get(
+                            source_table.c.pass_fail_credit_indicator
+                        ),
+                        10
                     ),
                     "institution_id": (
                         self._institution_uuid(
@@ -310,32 +282,23 @@ class ImportParentsMigrator(BaseMigrator):
                         None
                     ),
                     "import_file_uuid": None,
-                    "is_registered": 1 if row_dict.get(
-                        parent_table.c.user_id
-                    ) else 0,
-                    "address_line1": self._truncate(
+                    "grade_average": self._truncate(
                         row_dict.get(
-                            address_table.c.address_line_1
+                            source_table.c.average
                         ),
-                        255
+                        20
                     ),
-                    "city": self._truncate(
+                    "final_grade_average": self._truncate(
                         row_dict.get(
-                            address_table.c.city
+                            source_table.c.course_grade
                         ),
-                        255
+                        20
                     ),
-                    "state": self._truncate(
+                    "credit_earned": self._truncate(
                         row_dict.get(
-                            state_table.c.state_code
+                            source_table.c.credit_earned
                         ),
-                        255
-                    ),
-                    "zip5": self._truncate(
-                        row_dict.get(
-                            address_table.c.zip_code
-                        ),
-                        255
+                        20
                     ),
                 }
 
@@ -348,13 +311,12 @@ class ImportParentsMigrator(BaseMigrator):
 
             if insert_data:
 
-                batch_number += 1
                 prepared_count += len(
                     insert_data
                 )
 
                 logger.info(
-                    f"Inserting import_parents chunk "
+                    f"Inserting import_course_information chunk "
                     f"{batch_number}: prepared="
                     f"{len(insert_data)}, "
                     f"source_id_through={last_source_id}, "
@@ -386,18 +348,14 @@ class ImportParentsMigrator(BaseMigrator):
                 break
 
         logger.info(
-            "Import Parents Migration Summary: "
+            "HS Course Information Import Summary: "
             f"source_count={source_count}, "
             f"destination_start_count={destination_count}, "
             f"fetched={fetched_count}, "
             f"prepared={prepared_count}, "
             f"inserted={inserted_count}, "
             f"ignored_existing={ignored_existing}, "
-            f"student_number_fallbacks="
-            f"{student_number_fallbacks}, "
-            f"first_name_fallbacks={first_name_fallbacks}, "
-            f"last_name_fallbacks={last_name_fallbacks}, "
-            f"missing_student_links={missing_student_links}, "
+            f"missing_student_number={missing_student_number}, "
             f"missing_institution_id={missing_institution_id}"
         )
 
@@ -445,7 +403,7 @@ class ImportParentsMigrator(BaseMigrator):
             )
         )
 
-    def _import_parent_uuid(
+    def _stable_uuid(
         self,
         source_id
     ):
@@ -453,7 +411,7 @@ class ImportParentsMigrator(BaseMigrator):
         return str(
             uuid.uuid5(
                 uuid.NAMESPACE_URL,
-                f"gll:import-parents:{source_id}"
+                f"gll:import-course-information:{source_id}"
             )
         )
 
@@ -506,12 +464,9 @@ class ImportParentsMigrator(BaseMigrator):
         table
     ):
 
-        table_columns = set(
-            table.c.keys()
-        )
-
         return {
-            key: value
-            for key, value in row.items()
-            if key in table_columns
+            column_name: row.get(
+                column_name
+            )
+            for column_name in table.c.keys()
         }
