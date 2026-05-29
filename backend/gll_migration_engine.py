@@ -53,7 +53,9 @@ from migrators import (
 
     CredentialVisibilityMigrator,
 
-    ImportStudentsMigrator
+    ImportStudentsMigrator,
+
+    ImportParentsMigrator
 
 )
 
@@ -861,6 +863,34 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # GL_PARENT -> IMPORT_PARENTS MIGRATION
+        # -----------------------------------------
+
+        import_parents_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "gl_parent"
+            )
+
+            and
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in [
+                    "import_parent",
+                    "import_parents"
+                ]
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -972,6 +1002,11 @@ class GLLMigrationEngine:
         logger.info(
             f"import_students_selected="
             f"{import_students_selected}"
+        )
+
+        logger.info(
+            f"import_parents_selected="
+            f"{import_parents_selected}"
         )
 
         # -----------------------------------------
@@ -1533,6 +1568,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 ImportStudentsMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add ImportParentsMigrator
+        # -----------------------------------------
+
+        if import_parents_selected:
+
+            logger.info(
+                "Adding ImportParentsMigrator"
+            )
+
+            migrators.append(
+
+                ImportParentsMigrator(
 
                     self,
 
