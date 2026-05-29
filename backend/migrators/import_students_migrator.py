@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import uuid
@@ -57,6 +58,12 @@ class ImportStudentsMigrator(BaseMigrator):
 
         state_table = self._manual_reflect(
             "state",
+            self.source_engine,
+            self.metadata_source
+        )
+
+        transcript_table = self._manual_reflect(
+            "transcript",
             self.source_engine,
             self.metadata_source
         )
@@ -167,6 +174,12 @@ class ImportStudentsMigrator(BaseMigrator):
                     rows
                 )
 
+            transcript_lookup = self._build_transcript_lookup(
+                rows,
+                source_table,
+                transcript_table
+            )
+
             insert_data = []
 
             for row in rows:
@@ -223,6 +236,10 @@ class ImportStudentsMigrator(BaseMigrator):
                     )
                     or
                     created_at
+                )
+                transcript_data = transcript_lookup.get(
+                    source_id,
+                    {}
                 )
 
                 mapped_row = {
@@ -353,6 +370,18 @@ class ImportStudentsMigrator(BaseMigrator):
                         ),
                         255
                     ),
+                    "phone_number": self._truncate(
+                        row_dict.get(
+                            source_table.c.phone_no
+                        ),
+                        255
+                    ),
+                    "phone_type": self._truncate(
+                        row_dict.get(
+                            source_table.c.phone_type
+                        ),
+                        255
+                    ),
                     "is_demographic": 1 if (
                         row_dict.get(
                             source_table.c.person_ethnics
@@ -362,6 +391,16 @@ class ImportStudentsMigrator(BaseMigrator):
                             source_table.c.person_race
                         )
                     ) else 0,
+                    "prefix": None,
+                    "suffix": None,
+                    "fieldOfStudy": transcript_data.get(
+                        "field_of_study"
+                    ),
+                    "degreeAwarded": transcript_data.get(
+                        "degrees_awarded"
+                    ),
+                    "gpa": None,
+                    "creditHours": None,
                 }
 
                 insert_data.append(
@@ -424,6 +463,171 @@ class ImportStudentsMigrator(BaseMigrator):
         )
 
         return inserted_count
+
+    def _build_transcript_lookup(
+        self,
+        student_rows,
+        source_table,
+        transcript_table
+    ):
+
+        student_ids = [
+            row._mapping.get(
+                source_table.c.id
+            )
+            for row in student_rows
+            if row._mapping.get(
+                source_table.c.id
+            ) is not None
+        ]
+
+        if not student_ids:
+
+            return {}
+
+        lookup = {}
+
+        with self.source_engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    transcript_table.c.student_id,
+                    transcript_table.c.field_of_study,
+                    transcript_table.c.degrees_awarded
+                )
+                .where(
+                    transcript_table.c.student_id.in_(
+                        student_ids
+                    )
+                )
+            ).fetchall()
+
+        for row in rows:
+
+            row_dict = row._mapping
+            student_id = row_dict.get(
+                transcript_table.c.student_id
+            )
+
+            if student_id is None:
+
+                continue
+
+            student_data = lookup.setdefault(
+                student_id,
+                {
+                    "field_of_study": [],
+                    "degrees_awarded": [],
+                    "_field_seen": set(),
+                    "_degree_seen": set(),
+                }
+            )
+
+            self._extend_json_values(
+                student_data["field_of_study"],
+                student_data["_field_seen"],
+                row_dict.get(
+                    transcript_table.c.field_of_study
+                )
+            )
+            self._extend_json_values(
+                student_data["degrees_awarded"],
+                student_data["_degree_seen"],
+                row_dict.get(
+                    transcript_table.c.degrees_awarded
+                )
+            )
+
+        cleaned_lookup = {}
+
+        for student_id, student_data in lookup.items():
+
+            cleaned_lookup[student_id] = {
+                "field_of_study": (
+                    student_data["field_of_study"]
+                    or
+                    None
+                ),
+                "degrees_awarded": (
+                    student_data["degrees_awarded"]
+                    or
+                    None
+                ),
+            }
+
+        return cleaned_lookup
+
+    def _extend_json_values(
+        self,
+        target,
+        seen,
+        raw_value
+    ):
+
+        values = self._json_array_values(
+            raw_value
+        )
+
+        for value in values:
+
+            cleaned = self._clean_string(
+                value
+            )
+
+            if not cleaned:
+
+                continue
+
+            if cleaned in seen:
+
+                continue
+
+            seen.add(
+                cleaned
+            )
+            target.append(
+                cleaned
+            )
+
+    def _json_array_values(
+        self,
+        raw_value
+    ):
+
+        raw_value = self._clean_string(
+            raw_value
+        )
+
+        if not raw_value:
+
+            return []
+
+        try:
+
+            parsed = json.loads(
+                raw_value
+            )
+
+        except (TypeError, ValueError):
+
+            return [
+                raw_value
+            ]
+
+        if parsed is None:
+
+            return []
+
+        if isinstance(
+            parsed,
+            list
+        ):
+
+            return parsed
+
+        return [
+            parsed
+        ]
 
     def _count_rows(
         self,
