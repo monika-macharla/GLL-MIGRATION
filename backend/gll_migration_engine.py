@@ -55,7 +55,9 @@ from migrators import (
 
     ImportStudentsMigrator,
 
-    ImportParentsMigrator
+    ImportParentsMigrator,
+
+    HSOtherCredsMigrator
 
 )
 
@@ -891,6 +893,42 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # HS OTHER CREDS IMPORT MIGRATION
+        # -----------------------------------------
+
+        hs_other_creds_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "hs_other_creds",
+                    "hs_othser_creds"
+                ]
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in [
+                    "import_apibs",
+                    "import_biliteracies",
+                    "import_cert_lics",
+                    "import_dual_credits",
+                    "import_college_assessments",
+                    "import_college_aasesments",
+                    "import_other_requirements"
+                ]
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1007,6 +1045,11 @@ class GLLMigrationEngine:
         logger.info(
             f"import_parents_selected="
             f"{import_parents_selected}"
+        )
+
+        logger.info(
+            f"hs_other_creds_selected="
+            f"{hs_other_creds_selected}"
         )
 
         # -----------------------------------------
@@ -1594,6 +1637,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 ImportParentsMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HSOtherCredsMigrator
+        # -----------------------------------------
+
+        if hs_other_creds_selected:
+
+            logger.info(
+                "Adding HSOtherCredsMigrator"
+            )
+
+            migrators.append(
+
+                HSOtherCredsMigrator(
 
                     self,
 

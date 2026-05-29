@@ -57,6 +57,7 @@ gl_parent_student                       parent_student
 //3. glldataingestion
 
 1. gl_student                               import_students
+2. gl_parent                                import_parents
 
 
 

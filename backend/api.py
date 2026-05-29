@@ -311,7 +311,21 @@ async def migrate(request: MigrationRequest):
 
                 "import_parent",
 
-                "import_parents"
+                "import_parents",
+
+                "import_apibs",
+
+                "import_biliteracies",
+
+                "import_cert_lics",
+
+                "import_dual_credits",
+
+                "import_college_assessments",
+
+                "import_college_aasesments",
+
+                "import_other_requirements"
             ]
 
             or
@@ -384,6 +398,10 @@ async def migrate(request: MigrationRequest):
                 "gl_student",
 
                 "gl_parent",
+
+                "hs_other_creds",
+
+                "hs_othser_creds",
             ]
 
             for m in request.mappings
