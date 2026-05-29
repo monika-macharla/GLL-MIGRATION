@@ -34,13 +34,14 @@ gl_parent_student                       parent_student
 13. student_credential_visibility     module_permissions
 
 //user_campus
+//employment 
 
 
 2. gllreports
 
 
 17. transcript                           credentials_transcript, credentials_all
-18. certificate                          credentials_certifications, credentials_all
+18. certificate                     p     credentials_certifications, credentials_all
 
 
 13. badge                           credentials_digital_badges,(gllreports)(support gllauthservicemigration)
@@ -53,7 +54,9 @@ gl_parent_student                       parent_student
 
 
 
+//3. glldataingestion
 
+1. gl_student                               import_students
 
 
 

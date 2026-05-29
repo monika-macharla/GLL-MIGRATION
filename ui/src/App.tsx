@@ -48,8 +48,9 @@ const [source, setSource] = useState<DBConfig>({
     port: 3307,
     username: 'glldev',
     password: 'G11d4V@6202',
-    database: 'gllauthservicedevmigration'
+    // database: 'gllauthservicedevmigration'
     // database: 'gllreportsmigration'
+    database: 'glldataingestiondevmigration'
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
