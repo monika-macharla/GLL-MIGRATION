@@ -335,7 +335,13 @@ async def migrate(request: MigrationRequest):
 
                 "import_student_test_assessments",
 
-                "import_student_graduation_profile"
+                "import_student_graduation_profile",
+
+                "import_schools_awarding_credits",
+
+                "import_credit_summary",
+
+                "vaccination_certificate_data"
             ]
 
             or
@@ -422,6 +428,12 @@ async def migrate(request: MigrationRequest):
                 "hs_test_assessment",
 
                 "hs_student_graduation_profile",
+
+                "hs_awarding_credit",
+
+                "hs_transcript",
+
+                "covid_vaccine_meta_data",
             ]
 
             for m in request.mappings

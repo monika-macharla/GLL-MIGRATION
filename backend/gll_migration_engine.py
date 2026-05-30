@@ -67,7 +67,13 @@ from migrators import (
 
     HSTestAssessmentMigrator,
 
-    HSStudentGraduationProfileMigrator
+    HSStudentGraduationProfileMigrator,
+
+    HSAwardingCreditMigrator,
+
+    HSCreditSummaryMigrator,
+
+    CovidVaccineMigrator
 
 )
 
@@ -1064,6 +1070,81 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # HS AWARDING CREDIT IMPORT MIGRATION
+        # -----------------------------------------
+
+        hs_awarding_credit_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "hs_awarding_credit"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_schools_awarding_credits"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # HS CREDIT SUMMARY IMPORT MIGRATION
+        # -----------------------------------------
+
+        hs_credit_summary_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "hs_transcript"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_credit_summary"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # COVID VACCINE IMPORT MIGRATION
+        # -----------------------------------------
+
+        covid_vaccine_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "covid_vaccine_meta_data"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "vaccination_certificate_data"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1210,6 +1291,21 @@ class GLLMigrationEngine:
         logger.info(
             f"hs_student_graduation_profile_selected="
             f"{hs_student_graduation_profile_selected}"
+        )
+
+        logger.info(
+            f"hs_awarding_credit_selected="
+            f"{hs_awarding_credit_selected}"
+        )
+
+        logger.info(
+            f"hs_credit_summary_selected="
+            f"{hs_credit_summary_selected}"
+        )
+
+        logger.info(
+            f"covid_vaccine_selected="
+            f"{covid_vaccine_selected}"
         )
 
         # -----------------------------------------
@@ -1953,6 +2049,84 @@ class GLLMigrationEngine:
             migrators.append(
 
                 HSStudentGraduationProfileMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HSAwardingCreditMigrator
+        # -----------------------------------------
+
+        if hs_awarding_credit_selected:
+
+            logger.info(
+                "Adding HSAwardingCreditMigrator"
+            )
+
+            migrators.append(
+
+                HSAwardingCreditMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HSCreditSummaryMigrator
+        # -----------------------------------------
+
+        if hs_credit_summary_selected:
+
+            logger.info(
+                "Adding HSCreditSummaryMigrator"
+            )
+
+            migrators.append(
+
+                HSCreditSummaryMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CovidVaccineMigrator
+        # -----------------------------------------
+
+        if covid_vaccine_selected:
+
+            logger.info(
+                "Adding CovidVaccineMigrator"
+            )
+
+            migrators.append(
+
+                CovidVaccineMigrator(
 
                     self,
 

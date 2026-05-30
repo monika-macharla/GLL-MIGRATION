@@ -29,6 +29,9 @@ from .hs_course_information_migrator import HSCourseInformationMigrator
 from .transcript_ext_migrator import TranscriptExtMigrator
 from .hs_test_assessment_migrator import HSTestAssessmentMigrator
 from .hs_student_graduation_profile_migrator import HSStudentGraduationProfileMigrator
+from .hs_awarding_credit_migrator import HSAwardingCreditMigrator
+from .hs_credit_summary_migrator import HSCreditSummaryMigrator
+from .covid_vaccine_migrator import CovidVaccineMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator','HSClassRankGPAMigrator','HSCourseInformationMigrator','TranscriptExtMigrator','HSTestAssessmentMigrator','HSStudentGraduationProfileMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator','HSClassRankGPAMigrator','HSCourseInformationMigrator','TranscriptExtMigrator','HSTestAssessmentMigrator','HSStudentGraduationProfileMigrator','HSAwardingCreditMigrator','HSCreditSummaryMigrator','CovidVaccineMigrator']
