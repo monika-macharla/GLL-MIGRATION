@@ -65,6 +65,17 @@ gl_parent_student                       parent_student
 4. hs_class_rank_gpa                        import_class_rank_gpa
 6. transcript_ext                           import_edi_transcript_ext
 
+7. hs_test_assessment                       import_student_test_assessments
+
+8. hs_student_graduation_profile           import_student_graduation_profile
+
+9. hs_awarding_credit                      import_schools_awarding_credits
+
+10.hs_transcript                           import_credit_summary
+
+11. covid_vaccine_meta_data                vaccination_certificate_data
+
+12. inst_holds_ext                         holds
 
 
 

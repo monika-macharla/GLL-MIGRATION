@@ -103,7 +103,6 @@ class CovidVaccineMigrator(BaseMigrator):
         prepared_count = 0
         inserted_count = 0
         ignored_existing = 0
-        skipped_without_dose = 0
         missing_student = 0
         missing_institution = 0
         batch_number = 0
@@ -192,15 +191,10 @@ class CovidVaccineMigrator(BaseMigrator):
                 )
                 last_source_id = source_id
 
-                dose_rows = self._dose_rows(
+                vaccine_summary = self._vaccine_summary(
                     row_dict,
                     source_table
                 )
-
-                if not dose_rows:
-
-                    skipped_without_dose += 1
-                    continue
 
                 source_user_id = row_dict.get(
                     source_table.c.user_id
@@ -240,96 +234,93 @@ class CovidVaccineMigrator(BaseMigrator):
                     source_user_id
                 )
 
-                for dose_number, vaccine_type, vaccine_date in dose_rows:
-
-                    mapped_row = {
-                        "uuid": self._stable_uuid(
-                            source_id,
-                            dose_number
+                mapped_row = {
+                    "uuid": self._stable_uuid(
+                        source_id
+                    ),
+                    "created_at": now,
+                    "updated_at": now,
+                    "deleted_at": None,
+                    "student_number": self._truncate(
+                        student_number,
+                        100
+                    ),
+                    "entity_name": self._truncate(
+                        institution_names.get(
+                            source_institution_id
                         ),
-                        "created_at": now,
-                        "updated_at": now,
-                        "deleted_at": None,
-                        "student_number": self._truncate(
-                            student_number,
-                            100
-                        ),
-                        "entity_name": self._truncate(
-                            institution_names.get(
-                                source_institution_id
-                            ),
-                            100
-                        ),
-                        "grade": None,
-                        "student_first_name": self._truncate(
-                            self._student_or_user_value(
-                                student,
-                                row_dict,
-                                gl_user_table,
-                                "first_name"
-                            ),
-                            100
-                        ),
-                        "student_middle_name": self._truncate(
-                            self._student_or_user_value(
-                                student,
-                                row_dict,
-                                gl_user_table,
-                                "middle_name"
-                            ),
-                            100
-                        ),
-                        "student_last_name": self._truncate(
-                            self._student_or_user_value(
-                                student,
-                                row_dict,
-                                gl_user_table,
-                                "last_name"
-                            ),
-                            100
-                        ),
-                        "dob": self._student_or_user_value(
+                        100
+                    ),
+                    "grade": None,
+                    "student_first_name": self._truncate(
+                        self._student_or_user_value(
                             student,
                             row_dict,
                             gl_user_table,
-                            "date_of_birth"
+                            "first_name"
                         ),
-                        "phone": self._truncate(
-                            self._student_or_user_value(
-                                student,
-                                row_dict,
-                                gl_user_table,
-                                "phone_no"
-                            ),
-                            20
+                        100
+                    ),
+                    "student_middle_name": self._truncate(
+                        self._student_or_user_value(
+                            student,
+                            row_dict,
+                            gl_user_table,
+                            "middle_name"
                         ),
-                        "vaccine_short_name": self._truncate(
-                            vaccine_type,
-                            100
+                        100
+                    ),
+                    "student_last_name": self._truncate(
+                        self._student_or_user_value(
+                            student,
+                            row_dict,
+                            gl_user_table,
+                            "last_name"
                         ),
-                        "vaccine_date": vaccine_date,
-                        "vaccine_long_desc": self._truncate(
-                            f"Dose {dose_number}",
-                            255
+                        100
+                    ),
+                    "dob": self._student_or_user_value(
+                        student,
+                        row_dict,
+                        gl_user_table,
+                        "date_of_birth"
+                    ),
+                    "phone": self._truncate(
+                        self._student_or_user_value(
+                            student,
+                            row_dict,
+                            gl_user_table,
+                            "phone_no"
                         ),
-                        "institution_uuid": (
-                            self._institution_uuid(
-                                source_institution_id
-                            )
-                            if source_institution_id
-                            else
-                            self._institution_uuid(1)
-                        ),
-                        "import_file_uuid": None,
-                        "status": 1,
-                    }
-
-                    insert_data.append(
-                        self._filter_to_table_columns(
-                            mapped_row,
-                            destination_table
+                        20
+                    ),
+                    "vaccine_short_name": self._truncate(
+                        vaccine_summary["short_name"],
+                        100
+                    ),
+                    "vaccine_date": vaccine_summary["date"],
+                    "vaccine_long_desc": self._truncate(
+                        vaccine_summary["long_desc"],
+                        255
+                    ),
+                    "institution_uuid": (
+                        self._institution_uuid(
+                            source_institution_id
                         )
+                        if source_institution_id
+                        else
+                        self._institution_uuid(1)
+                    ),
+                    "import_file_uuid": None,
+                    "status": 1,
+                }
+
+                insert_data.append(
+                    self._filter_to_table_columns(
+                        mapped_row,
+                        destination_table
                     )
+                )
 
             if insert_data:
 
@@ -377,7 +368,6 @@ class CovidVaccineMigrator(BaseMigrator):
             f"prepared={prepared_count}, "
             f"inserted={inserted_count}, "
             f"ignored_existing={ignored_existing}, "
-            f"skipped_without_dose={skipped_without_dose}, "
             f"missing_student={missing_student}, "
             f"missing_institution={missing_institution}"
         )
@@ -495,13 +485,11 @@ class CovidVaccineMigrator(BaseMigrator):
             )
         }
 
-    def _dose_rows(
+    def _vaccine_summary(
         self,
         row_dict,
         source_table
     ):
-
-        dose_rows = []
 
         dose_1_type = self._clean_string(
             row_dict.get(
@@ -512,16 +500,6 @@ class CovidVaccineMigrator(BaseMigrator):
             source_table.c.dose1_date
         )
 
-        if dose_1_type or dose_1_date:
-
-            dose_rows.append(
-                (
-                    1,
-                    dose_1_type,
-                    dose_1_date
-                )
-            )
-
         dose_2_type = self._clean_string(
             row_dict.get(
                 source_table.c.dose2_type
@@ -531,17 +509,100 @@ class CovidVaccineMigrator(BaseMigrator):
             source_table.c.dose2_date
         )
 
+        dose_descriptions = []
+
+        if dose_1_type or dose_1_date:
+
+            dose_descriptions.append(
+                self._dose_description(
+                    1,
+                    dose_1_type,
+                    dose_1_date
+                )
+            )
+
         if dose_2_type or dose_2_date:
 
-            dose_rows.append(
-                (
+            dose_descriptions.append(
+                self._dose_description(
                     2,
                     dose_2_type,
                     dose_2_date
                 )
             )
 
-        return dose_rows
+        vaccine_types = [
+            vaccine_type
+            for vaccine_type in (
+                dose_1_type,
+                dose_2_type
+            )
+            if vaccine_type
+        ]
+
+        unique_vaccine_types = list(
+            dict.fromkeys(
+                vaccine_types
+            )
+        )
+
+        return {
+            "short_name": (
+                " / ".join(
+                    unique_vaccine_types
+                )
+                if unique_vaccine_types
+                else
+                None
+            ),
+            "date": (
+                dose_2_date
+                or
+                dose_1_date
+            ),
+            "long_desc": (
+                "; ".join(
+                    dose_descriptions
+                )
+                if dose_descriptions
+                else
+                "COVID-19 vaccination record"
+            ),
+        }
+
+    def _dose_description(
+        self,
+        dose_number,
+        vaccine_type,
+        vaccine_date
+    ):
+
+        details = []
+
+        if vaccine_type:
+
+            details.append(
+                vaccine_type
+            )
+
+        if vaccine_date:
+
+            details.append(
+                str(
+                    vaccine_date
+                )
+            )
+
+        if details:
+
+            return (
+                f"Dose {dose_number}: "
+                + " on ".join(
+                    details
+                )
+            )
+
+        return f"Dose {dose_number}"
 
     def _student_number(
         self,
@@ -649,14 +710,13 @@ class CovidVaccineMigrator(BaseMigrator):
 
     def _stable_uuid(
         self,
-        source_id,
-        dose_number
+        source_id
     ):
 
         return str(
             uuid.uuid5(
                 uuid.NAMESPACE_URL,
-                f"gll:vaccination-certificate-data:{source_id}:{dose_number}"
+                f"gll:vaccination-certificate-data:{source_id}"
             )
         )
 

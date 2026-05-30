@@ -73,7 +73,9 @@ from migrators import (
 
     HSCreditSummaryMigrator,
 
-    CovidVaccineMigrator
+    CovidVaccineMigrator,
+
+    HoldsMigrator
 
 )
 
@@ -1145,6 +1147,31 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # HOLDS MIGRATION
+        # -----------------------------------------
+
+        holds_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "inst_holds_ext"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "holds"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1306,6 +1333,11 @@ class GLLMigrationEngine:
         logger.info(
             f"covid_vaccine_selected="
             f"{covid_vaccine_selected}"
+        )
+
+        logger.info(
+            f"holds_selected="
+            f"{holds_selected}"
         )
 
         # -----------------------------------------
@@ -2127,6 +2159,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 CovidVaccineMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HoldsMigrator
+        # -----------------------------------------
+
+        if holds_selected:
+
+            logger.info(
+                "Adding HoldsMigrator"
+            )
+
+            migrators.append(
+
+                HoldsMigrator(
 
                     self,
 

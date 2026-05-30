@@ -434,6 +434,10 @@ async def migrate(request: MigrationRequest):
                 "hs_transcript",
 
                 "covid_vaccine_meta_data",
+
+                "inst_holds_ext",
+
+                "holds",
             ]
 
             for m in request.mappings
