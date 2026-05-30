@@ -27,6 +27,8 @@ from .hs_other_creds_migrator import HSOtherCredsMigrator
 from .hs_class_rank_gpa_migrator import HSClassRankGPAMigrator
 from .hs_course_information_migrator import HSCourseInformationMigrator
 from .transcript_ext_migrator import TranscriptExtMigrator
+from .hs_test_assessment_migrator import HSTestAssessmentMigrator
+from .hs_student_graduation_profile_migrator import HSStudentGraduationProfileMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator','HSClassRankGPAMigrator','HSCourseInformationMigrator','TranscriptExtMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator','HSClassRankGPAMigrator','HSCourseInformationMigrator','TranscriptExtMigrator','HSTestAssessmentMigrator','HSStudentGraduationProfileMigrator']

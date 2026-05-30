@@ -331,7 +331,11 @@ async def migrate(request: MigrationRequest):
 
                 "import_course_information",
 
-                "import_edi_transcript_ext"
+                "import_edi_transcript_ext",
+
+                "import_student_test_assessments",
+
+                "import_student_graduation_profile"
             ]
 
             or
@@ -414,6 +418,10 @@ async def migrate(request: MigrationRequest):
                 "hs_course_information",
 
                 "transcript_ext",
+
+                "hs_test_assessment",
+
+                "hs_student_graduation_profile",
             ]
 
             for m in request.mappings

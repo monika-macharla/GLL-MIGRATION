@@ -63,7 +63,11 @@ from migrators import (
 
     HSCourseInformationMigrator,
 
-    TranscriptExtMigrator
+    TranscriptExtMigrator,
+
+    HSTestAssessmentMigrator,
+
+    HSStudentGraduationProfileMigrator
 
 )
 
@@ -1010,6 +1014,56 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # HS TEST ASSESSMENT IMPORT MIGRATION
+        # -----------------------------------------
+
+        hs_test_assessment_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "hs_test_assessment"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_student_test_assessments"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # HS STUDENT GRADUATION PROFILE IMPORT MIGRATION
+        # -----------------------------------------
+
+        hs_student_graduation_profile_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "hs_student_graduation_profile"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_student_graduation_profile"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1146,6 +1200,16 @@ class GLLMigrationEngine:
         logger.info(
             f"transcript_ext_selected="
             f"{transcript_ext_selected}"
+        )
+
+        logger.info(
+            f"hs_test_assessment_selected="
+            f"{hs_test_assessment_selected}"
+        )
+
+        logger.info(
+            f"hs_student_graduation_profile_selected="
+            f"{hs_student_graduation_profile_selected}"
         )
 
         # -----------------------------------------
@@ -1837,6 +1901,58 @@ class GLLMigrationEngine:
             migrators.append(
 
                 TranscriptExtMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HSTestAssessmentMigrator
+        # -----------------------------------------
+
+        if hs_test_assessment_selected:
+
+            logger.info(
+                "Adding HSTestAssessmentMigrator"
+            )
+
+            migrators.append(
+
+                HSTestAssessmentMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add HSStudentGraduationProfileMigrator
+        # -----------------------------------------
+
+        if hs_student_graduation_profile_selected:
+
+            logger.info(
+                "Adding HSStudentGraduationProfileMigrator"
+            )
+
+            migrators.append(
+
+                HSStudentGraduationProfileMigrator(
 
                     self,
 
