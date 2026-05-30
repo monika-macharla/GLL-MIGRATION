@@ -341,7 +341,9 @@ async def migrate(request: MigrationRequest):
 
                 "import_credit_summary",
 
-                "vaccination_certificate_data"
+                "vaccination_certificate_data",
+
+                "user_campus"
             ]
 
             or

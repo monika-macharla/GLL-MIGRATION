@@ -75,7 +75,9 @@ from migrators import (
 
     CovidVaccineMigrator,
 
-    HoldsMigrator
+    HoldsMigrator,
+
+    UserCampusMigrator
 
 )
 
@@ -1172,6 +1174,36 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # USER CAMPUS MIGRATION
+        # -----------------------------------------
+
+        user_campus_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "institution_user"
+                and
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "user_campus"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "user_campus"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1338,6 +1370,11 @@ class GLLMigrationEngine:
         logger.info(
             f"holds_selected="
             f"{holds_selected}"
+        )
+
+        logger.info(
+            f"user_campus_selected="
+            f"{user_campus_selected}"
         )
 
         # -----------------------------------------
@@ -2185,6 +2222,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 HoldsMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add UserCampusMigrator
+        # -----------------------------------------
+
+        if user_campus_selected:
+
+            logger.info(
+                "Adding UserCampusMigrator"
+            )
+
+            migrators.append(
+
+                UserCampusMigrator(
 
                     self,
 
