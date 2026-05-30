@@ -60,8 +60,10 @@ gl_parent_student                       parent_student
 2. gl_parent                                import_parents
 3. hs_other_creds                           import_apibs
 
-4. hs_class_rank_gpa                        import_class_rank_gpa
 5. hs_course_information                    import_course_information
+
+4. hs_class_rank_gpa                        import_class_rank_gpa
+6. transcript_ext                           import_edi_transcript_ext
 
 
 

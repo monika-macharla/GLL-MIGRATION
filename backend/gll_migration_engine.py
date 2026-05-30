@@ -61,7 +61,9 @@ from migrators import (
 
     HSClassRankGPAMigrator,
 
-    HSCourseInformationMigrator
+    HSCourseInformationMigrator,
+
+    TranscriptExtMigrator
 
 )
 
@@ -983,6 +985,31 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # TRANSCRIPT EXT IMPORT MIGRATION
+        # -----------------------------------------
+
+        transcript_ext_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "transcript_ext"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_edi_transcript_ext"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1114,6 +1141,11 @@ class GLLMigrationEngine:
         logger.info(
             f"hs_course_information_selected="
             f"{hs_course_information_selected}"
+        )
+
+        logger.info(
+            f"transcript_ext_selected="
+            f"{transcript_ext_selected}"
         )
 
         # -----------------------------------------
@@ -1779,6 +1811,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 HSCourseInformationMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add TranscriptExtMigrator
+        # -----------------------------------------
+
+        if transcript_ext_selected:
+
+            logger.info(
+                "Adding TranscriptExtMigrator"
+            )
+
+            migrators.append(
+
+                TranscriptExtMigrator(
 
                     self,
 
