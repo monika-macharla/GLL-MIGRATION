@@ -343,7 +343,9 @@ async def migrate(request: MigrationRequest):
 
                 "vaccination_certificate_data",
 
-                "user_campus"
+                "user_campus",
+
+                "employment",
             ]
 
             or
@@ -440,6 +442,8 @@ async def migrate(request: MigrationRequest):
                 "inst_holds_ext",
 
                 "holds",
+
+                "employment_history",
             ]
 
             for m in request.mappings

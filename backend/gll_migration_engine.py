@@ -77,7 +77,9 @@ from migrators import (
 
     HoldsMigrator,
 
-    UserCampusMigrator
+    UserCampusMigrator,
+
+    EmploymentMigrator
 
 )
 
@@ -1204,6 +1206,36 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # EMPLOYMENT MIGRATION
+        # -----------------------------------------
+
+        employment_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "employment_history"
+                and
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "employment"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "employment"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1375,6 +1407,11 @@ class GLLMigrationEngine:
         logger.info(
             f"user_campus_selected="
             f"{user_campus_selected}"
+        )
+
+        logger.info(
+            f"employment_selected="
+            f"{employment_selected}"
         )
 
         # -----------------------------------------
@@ -2248,6 +2285,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 UserCampusMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add EmploymentMigrator
+        # -----------------------------------------
+
+        if employment_selected:
+
+            logger.info(
+                "Adding EmploymentMigrator"
+            )
+
+            migrators.append(
+
+                EmploymentMigrator(
 
                     self,
 

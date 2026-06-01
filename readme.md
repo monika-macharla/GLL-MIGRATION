@@ -33,8 +33,7 @@ gl_parent_student                       parent_student
 
 13. student_credential_visibility     module_permissions
 
-//user_campus
-//employment 
+14. institution_user                  user_campus
 
 
 2. gllreports
@@ -51,6 +50,9 @@ gl_parent_student                       parent_student
 
 16. other-credentials                    self-uploads, credentials_all
 19. badge_shared                         credentials_shared,students_credentials_share_history
+
+15. employment_history                employment 
+
 
 
 
