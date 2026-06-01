@@ -303,6 +303,10 @@ async def migrate(request: MigrationRequest):
 
                 "scholarship_prefernces",
 
+                "scholarship_user_activity",
+
+                "institution_sftp_credentials",
+
                 "module_permissions",
 
                 "permissions",
@@ -410,6 +414,12 @@ async def migrate(request: MigrationRequest):
                 "ferpa",
 
                 "nsapi_criteria",
+
+                "scholarship_activity",
+
+                "esc_sftp_user",
+
+                "esc_sftp_user_public_key",
 
                 "student_credential_visibility",
 

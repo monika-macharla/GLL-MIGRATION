@@ -51,7 +51,11 @@ gl_parent_student                       parent_student
 16. other-credentials                    self-uploads, credentials_all
 19. badge_shared                         credentials_shared,students_credentials_share_history
 
-15. employment_history                employment 
+15. employment_history                employment
+
+16. scholarship_activity             scholarship_user_activity
+
+17. esc_sftp_user                    institution_sftp_credentials
 
 
 

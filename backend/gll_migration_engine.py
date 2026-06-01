@@ -79,7 +79,11 @@ from migrators import (
 
     UserCampusMigrator,
 
-    EmploymentMigrator
+    EmploymentMigrator,
+
+    ScholarshipActivityMigrator,
+
+    InstitutionSftpCredentialsMigrator
 
 )
 
@@ -1236,6 +1240,69 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # SCHOLARSHIP ACTIVITY MIGRATION
+        # -----------------------------------------
+
+        scholarship_activity_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "scholarship_activity"
+                and
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "scholarship_user_activity"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "scholarship_user_activity"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # INSTITUTION SFTP CREDENTIALS MIGRATION
+        # -----------------------------------------
+
+        institution_sftp_credentials_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "esc_sftp_user",
+                    "esc_sftp_user_public_key"
+                ]
+                and
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "institution_sftp_credentials"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "institution_sftp_credentials"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1412,6 +1479,16 @@ class GLLMigrationEngine:
         logger.info(
             f"employment_selected="
             f"{employment_selected}"
+        )
+
+        logger.info(
+            f"scholarship_activity_selected="
+            f"{scholarship_activity_selected}"
+        )
+
+        logger.info(
+            f"institution_sftp_credentials_selected="
+            f"{institution_sftp_credentials_selected}"
         )
 
         # -----------------------------------------
@@ -2311,6 +2388,58 @@ class GLLMigrationEngine:
             migrators.append(
 
                 EmploymentMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add ScholarshipActivityMigrator
+        # -----------------------------------------
+
+        if scholarship_activity_selected:
+
+            logger.info(
+                "Adding ScholarshipActivityMigrator"
+            )
+
+            migrators.append(
+
+                ScholarshipActivityMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add InstitutionSftpCredentialsMigrator
+        # -----------------------------------------
+
+        if institution_sftp_credentials_selected:
+
+            logger.info(
+                "Adding InstitutionSftpCredentialsMigrator"
+            )
+
+            migrators.append(
+
+                InstitutionSftpCredentialsMigrator(
 
                     self,
 
