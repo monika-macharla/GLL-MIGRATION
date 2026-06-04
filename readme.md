@@ -60,6 +60,8 @@ gl_parent_student                       parent_student
 
 
 
+
+
 //3. glldataingestion
 
 1. gl_student                               import_students
@@ -69,7 +71,7 @@ gl_parent_student                       parent_student
 5. hs_course_information                    import_course_information
 
 4. hs_class_rank_gpa                        import_class_rank_gpa
-6. transcript_ext                           import_edi_transcript_ext
+6. transcript_ext                           import_edi_transcript_ext(fixes)
 
 7. hs_test_assessment                       import_student_test_assessments
 
@@ -79,9 +81,15 @@ gl_parent_student                       parent_student
 
 10.hs_transcript                           import_credit_summary
 
-11. covid_vaccine_meta_data                vaccination_certificate_data
+11. cc_degree_awarded                      import_edi_award
 
-12. inst_holds_ext                         holds
+12. cc_courses / cc_course                 import_edi_courses / import_edi_course
+
+13. covid_vaccine_meta_data                vaccination_certificate_data
+
+14. inst_holds_ext                         holds
+
+15. cc_edi_award                           import_edi_award
 
 
 

@@ -48,9 +48,9 @@ const [source, setSource] = useState<DBConfig>({
     port: 3307,
     username: 'glldev',
     password: 'G11d4V@6202',
-    database: 'gllauthservicedevmigration'
+    // database: 'gllauthservicedevmigration'
     // database: 'gllreportsdevmigration'
-    // database: 'glldataingestiondevmigration'
+    database: 'glldataingestiondevmigration'
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
@@ -230,6 +230,10 @@ const [source, setSource] = useState<DBConfig>({
     if (field === 'source_table') {
       if (value === 'institution' || value === 'address') {
         newMappings[index].destination_table = 'institutions';
+      } else if (value === 'cc_degree_awarded' || value === 'cc_degree_awaeded') {
+        newMappings[index].destination_table = 'import_edi_award';
+      } else if (value === 'cc_courses' || value === 'cc_course') {
+        newMappings[index].destination_table = 'import_edi_courses';
       } else if (!newMappings[index].destination_table) {
         newMappings[index].destination_table = value;
       }
