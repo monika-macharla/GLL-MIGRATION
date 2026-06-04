@@ -351,6 +351,10 @@ async def migrate(request: MigrationRequest):
 
                 "import_edi_course",
 
+                "import_edi_semester",
+
+                "import_edi_semesters",
+
                 "vaccination_certificate_data",
 
                 "user_campus",
@@ -460,6 +464,8 @@ async def migrate(request: MigrationRequest):
                 "cc_courses",
 
                 "cc_course",
+
+                "cc_term",
 
                 "covid_vaccine_meta_data",
 

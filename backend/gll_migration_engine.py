@@ -77,6 +77,8 @@ from migrators import (
 
     CCCoursesMigrator,
 
+    CCTermMigrator,
+
     CovidVaccineMigrator,
 
     HoldsMigrator,
@@ -1193,6 +1195,34 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # CC TERM IMPORT MIGRATION
+        # -----------------------------------------
+
+        cc_term_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "cc_term"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in (
+                    "import_edi_semester",
+                    "import_edi_semesters",
+                )
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # COVID VACCINE IMPORT MIGRATION
         # -----------------------------------------
 
@@ -1532,6 +1562,11 @@ class GLLMigrationEngine:
         logger.info(
             f"cc_courses_selected="
             f"{cc_courses_selected}"
+        )
+
+        logger.info(
+            f"cc_term_selected="
+            f"{cc_term_selected}"
         )
 
         logger.info(
@@ -2409,6 +2444,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 CCCoursesMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CCTermMigrator
+        # -----------------------------------------
+
+        if cc_term_selected:
+
+            logger.info(
+                "Adding CCTermMigrator"
+            )
+
+            migrators.append(
+
+                CCTermMigrator(
 
                     self,
 

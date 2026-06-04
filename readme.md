@@ -89,7 +89,13 @@ gl_parent_student                       parent_student
 
 14. inst_holds_ext                         holds
 
-15. cc_edi_award                           import_edi_award
+15. cc_degree_award                        import_edi_award
+
+16. cc_courses                             import_edi_courses
+
+17. cc_term                                import_edi_semester
+
+18.
 
 
 

@@ -234,6 +234,8 @@ const [source, setSource] = useState<DBConfig>({
         newMappings[index].destination_table = 'import_edi_award';
       } else if (value === 'cc_courses' || value === 'cc_course') {
         newMappings[index].destination_table = 'import_edi_courses';
+      } else if (value === 'cc_term') {
+        newMappings[index].destination_table = 'import_edi_semester';
       } else if (!newMappings[index].destination_table) {
         newMappings[index].destination_table = value;
       }

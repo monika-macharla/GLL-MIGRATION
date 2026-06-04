@@ -11,13 +11,13 @@ from .base_migrator import BaseMigrator
 logger = logging.getLogger(__name__)
 
 
-class CCDegreeAwardedMigrator(BaseMigrator):
+class CCTermMigrator(BaseMigrator):
 
-    SOURCE_TABLE = "cc_degree_awarded"
-    SOURCE_TABLE_ALIAS = "cc_degree_awaeded"
-    DESTINATION_TABLE = "import_edi_award"
-    DEFAULT_BATCH_SIZE = 10000
-    MAX_BATCH_SIZE = 20000
+    SOURCE_TABLE = "cc_term"
+    DESTINATION_TABLE = "import_edi_semester"
+    DESTINATION_TABLE_ALIAS = "import_edi_semesters"
+    DEFAULT_BATCH_SIZE = 5000
+    MAX_BATCH_SIZE = 10000
 
     def __init__(
         self,
@@ -40,13 +40,17 @@ class CCDegreeAwardedMigrator(BaseMigrator):
     def migrate(self) -> int:
 
         logger.info(
-            "Starting CC Degree Awarded Import Migration..."
+            "Starting CC Term Import Migration..."
         )
 
-        source_table_name = self._resolve_source_table_name()
+        destination_table_name = self._resolve_table_name(
+            self.dest_engine,
+            self.DESTINATION_TABLE,
+            self.DESTINATION_TABLE_ALIAS
+        )
 
         source_table = self._manual_reflect(
-            source_table_name,
+            self.SOURCE_TABLE,
             self.source_engine,
             self.metadata_source
         )
@@ -70,7 +74,7 @@ class CCDegreeAwardedMigrator(BaseMigrator):
         )
 
         destination_table = self._manual_reflect(
-            self.DESTINATION_TABLE,
+            destination_table_name,
             self.dest_engine,
             self.metadata_dest
         )
@@ -89,10 +93,10 @@ class CCDegreeAwardedMigrator(BaseMigrator):
         )
 
         logger.info(
-            f"Source {source_table_name} count: {source_count}"
+            f"Source cc_term count: {source_count}"
         )
         logger.info(
-            "Destination import_edi_award current count: "
+            f"Destination {destination_table_name} current count: "
             f"{destination_count}"
         )
 
@@ -112,7 +116,8 @@ class CCDegreeAwardedMigrator(BaseMigrator):
         ignored_existing = 0
         missing_student_number = 0
         missing_institution_id = 0
-        invalid_degree_date = 0
+        invalid_start_date = 0
+        invalid_end_date = 0
         batch_number = 0
 
         while True:
@@ -134,9 +139,12 @@ class CCDegreeAwardedMigrator(BaseMigrator):
                 select(
                     source_table.c.id,
                     source_table.c.transcript_id,
-                    source_table.c.degree,
-                    source_table.c.confer_date,
-                    source_table.c.field_of_study,
+                    source_table.c.term,
+                    source_table.c.start_date,
+                    source_table.c.end_date,
+                    source_table.c.earned_hours,
+                    source_table.c.gpa,
+                    source_table.c.year,
                     credential_table.c.stu_identification,
                     credential_table.c.institution_id,
                     institution_table.c.name
@@ -238,23 +246,40 @@ class CCDegreeAwardedMigrator(BaseMigrator):
                     None
                 )
 
-                degree_date = self._parse_date(
+                start_date = self._parse_date(
                     row_dict.get(
-                        source_table.c.confer_date
+                        source_table.c.start_date
+                    )
+                )
+                end_date = self._parse_date(
+                    row_dict.get(
+                        source_table.c.end_date
                     )
                 )
 
                 if (
-                    degree_date is None
+                    start_date is None
                     and
                     self._clean_string(
                         row_dict.get(
-                            source_table.c.confer_date
+                            source_table.c.start_date
                         )
                     )
                 ):
 
-                    invalid_degree_date += 1
+                    invalid_start_date += 1
+
+                if (
+                    end_date is None
+                    and
+                    self._clean_string(
+                        row_dict.get(
+                            source_table.c.end_date
+                        )
+                    )
+                ):
+
+                    invalid_end_date += 1
 
                 mapped_row = {
                     "uuid": self._stable_uuid(
@@ -279,23 +304,36 @@ class CCDegreeAwardedMigrator(BaseMigrator):
                             None
                         )
                     ),
-                    "degree": self._truncate(
+                    "semester_id": self._truncate(
                         row_dict.get(
-                            source_table.c.degree
+                            source_table.c.term
                         ),
-                        256
+                        255
                     ),
-                    "degree_date": degree_date,
-                    "field_of_study": self._truncate(
+                    "gpa": self._float_value(
                         row_dict.get(
-                            source_table.c.field_of_study
+                            source_table.c.gpa
+                        )
+                    ),
+                    "credit_hrs": self._integer_value(
+                        row_dict.get(
+                            source_table.c.earned_hours
+                        )
+                    ),
+                    "term": self._truncate(
+                        row_dict.get(
+                            source_table.c.term
                         ),
-                        256
+                        255
                     ),
-                    "institution_name": self._truncate(
-                        institution_name,
-                        256
+                    "year": self._truncate(
+                        row_dict.get(
+                            source_table.c.year
+                        ),
+                        45
                     ),
+                    "start_date": start_date,
+                    "end_date": end_date,
                     "import_file_uuid": None,
                 }
 
@@ -313,7 +351,7 @@ class CCDegreeAwardedMigrator(BaseMigrator):
                 )
 
                 logger.info(
-                    "Inserting import_edi_award chunk "
+                    f"Inserting {destination_table_name} chunk "
                     f"{batch_number}: prepared="
                     f"{len(insert_data)}, "
                     f"source_id_through={last_source_id}, "
@@ -345,7 +383,7 @@ class CCDegreeAwardedMigrator(BaseMigrator):
                 break
 
         logger.info(
-            "CC Degree Awarded Import Summary: "
+            "CC Term Import Summary: "
             f"source_count={source_count}, "
             f"destination_start_count={destination_count}, "
             f"fetched={fetched_count}, "
@@ -354,7 +392,8 @@ class CCDegreeAwardedMigrator(BaseMigrator):
             f"ignored_existing={ignored_existing}, "
             f"missing_student_number={missing_student_number}, "
             f"missing_institution_id={missing_institution_id}, "
-            f"invalid_degree_date={invalid_degree_date}"
+            f"invalid_start_date={invalid_start_date}, "
+            f"invalid_end_date={invalid_end_date}"
         )
 
         return inserted_count
@@ -373,25 +412,30 @@ class CCDegreeAwardedMigrator(BaseMigrator):
                 )
             ).scalar() or 0
 
-    def _resolve_source_table_name(self):
+    def _resolve_table_name(
+        self,
+        engine,
+        primary_name,
+        alias_name
+    ):
 
         inspector = inspect(
-            self.source_engine
+            engine
         )
 
         table_names = set(
             inspector.get_table_names()
         )
 
-        if self.SOURCE_TABLE in table_names:
+        if primary_name in table_names:
 
-            return self.SOURCE_TABLE
+            return primary_name
 
-        if self.SOURCE_TABLE_ALIAS in table_names:
+        if alias_name in table_names:
 
-            return self.SOURCE_TABLE_ALIAS
+            return alias_name
 
-        return self.SOURCE_TABLE
+        return primary_name
 
     def _load_destination_institution_lookup(self):
 
@@ -486,7 +530,7 @@ class CCDegreeAwardedMigrator(BaseMigrator):
         return str(
             uuid.uuid5(
                 uuid.NAMESPACE_URL,
-                f"gll:import-edi-award:{source_id}"
+                f"gll:import-edi-semester:{source_id}"
             )
         )
 
@@ -534,6 +578,48 @@ class CCDegreeAwardedMigrator(BaseMigrator):
                 continue
 
         return None
+
+    def _float_value(
+        self,
+        value
+    ):
+
+        value = self._clean_string(
+            value
+        )
+
+        if value is None:
+
+            return None
+
+        try:
+
+            return float(
+                value
+            )
+
+        except ValueError:
+
+            return None
+
+    def _integer_value(
+        self,
+        value
+    ):
+
+        float_value = self._float_value(
+            value
+        )
+
+        if float_value is None:
+
+            return None
+
+        return int(
+            round(
+                float_value
+            )
+        )
 
     def _clean_string(
         self,
