@@ -345,6 +345,12 @@ async def migrate(request: MigrationRequest):
 
                 "import_credit_summary",
 
+                "import_edi_award",
+
+                "import_edi_courses",
+
+                "import_edi_course",
+
                 "vaccination_certificate_data",
 
                 "user_campus",
@@ -446,6 +452,14 @@ async def migrate(request: MigrationRequest):
                 "hs_awarding_credit",
 
                 "hs_transcript",
+
+                "cc_degree_awarded",
+
+                "cc_degree_awaeded",
+
+                "cc_courses",
+
+                "cc_course",
 
                 "covid_vaccine_meta_data",
 

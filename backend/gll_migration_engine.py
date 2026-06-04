@@ -73,6 +73,10 @@ from migrators import (
 
     HSCreditSummaryMigrator,
 
+    CCDegreeAwardedMigrator,
+
+    CCCoursesMigrator,
+
     CovidVaccineMigrator,
 
     HoldsMigrator,
@@ -1130,6 +1134,65 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # CC DEGREE AWARDED IMPORT MIGRATION
+        # -----------------------------------------
+
+        cc_degree_awarded_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in (
+                    "cc_degree_awarded",
+                    "cc_degree_awaeded",
+                )
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_edi_award"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # CC COURSES IMPORT MIGRATION
+        # -----------------------------------------
+
+        cc_courses_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in (
+                    "cc_courses",
+                    "cc_course",
+                )
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in (
+                    "import_edi_courses",
+                    "import_edi_course",
+                )
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # COVID VACCINE IMPORT MIGRATION
         # -----------------------------------------
 
@@ -1459,6 +1522,16 @@ class GLLMigrationEngine:
         logger.info(
             f"hs_credit_summary_selected="
             f"{hs_credit_summary_selected}"
+        )
+
+        logger.info(
+            f"cc_degree_awarded_selected="
+            f"{cc_degree_awarded_selected}"
+        )
+
+        logger.info(
+            f"cc_courses_selected="
+            f"{cc_courses_selected}"
         )
 
         logger.info(
@@ -2284,6 +2357,58 @@ class GLLMigrationEngine:
             migrators.append(
 
                 HSCreditSummaryMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CCDegreeAwardedMigrator
+        # -----------------------------------------
+
+        if cc_degree_awarded_selected:
+
+            logger.info(
+                "Adding CCDegreeAwardedMigrator"
+            )
+
+            migrators.append(
+
+                CCDegreeAwardedMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CCCoursesMigrator
+        # -----------------------------------------
+
+        if cc_courses_selected:
+
+            logger.info(
+                "Adding CCCoursesMigrator"
+            )
+
+            migrators.append(
+
+                CCCoursesMigrator(
 
                     self,
 
