@@ -21,8 +21,47 @@ class CredentialsSharedMigrator(BaseMigrator):
     HISTORY_DESTINATION_TABLE = "student_credentials_share_history"
     LEGACY_HISTORY_DESTINATION_TABLE = "students_credentials_share_history"
     DYNAMIC_VALUE = "DYNAMIC"
+    S3_BASE_URL = "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 10000
+    SHARE_PATHS = {
+        "badge_shared": {
+            "id_source": "credential",
+            "template": "badges/{id}/pdf_badge",
+        },
+        "certificate_share": {
+            "id_source": "credential",
+            "template": "certificate/{id}/certificate_data",
+        },
+        "other_credential_share": {
+            "id_source": "credential",
+            "template": "other_credential/{id}/credential_data",
+        },
+        "recommendation_letter_share": {
+            "id_source": "credential",
+            "template": "recommendationletter/{id}/file",
+        },
+        "resume_share": {
+            "id_source": "credential",
+            "template": "resume/{id}/resume_data",
+        },
+        "transcript_shared": {
+            "id_source": "share_link",
+            "template": "shared/{id}/pdf_transcript",
+        },
+        "hs_transcript_shared": {
+            "id_source": "share_link",
+            "template": "highschoolshare/{id}/pdf_transcript",
+        },
+        "cc_transcript_shared": {
+            "id_source": "share_link",
+            "template": "communitycollegeshare/{id}/pdf_transcript",
+        },
+        "4yr_transcript_shared": {
+            "id_source": "share_link",
+            "template": "fouryear-share/{id}/pdf_transcript",
+        },
+    }
 
     SHARE_SOURCES = [
         {
@@ -82,30 +121,33 @@ class CredentialsSharedMigrator(BaseMigrator):
         },
         {
             "share_table": "hs_transcript_shared",
-            "credential_table": "transcript",
+            "credential_table": "hs_transcript",
             "credential_type": 2,
             "credential_id_columns": ["transcript_id"],
             "credentials_all_link_column": "transcripts",
             "uuid_prefix": "transcript",
             "owner_columns": ["user_id"],
+            "target_id_column": "credential_id",
         },
         {
             "share_table": "cc_transcript_shared",
-            "credential_table": "transcript",
+            "credential_table": "cc_transcript",
             "credential_type": 2,
             "credential_id_columns": ["transcript_id"],
             "credentials_all_link_column": "transcripts",
             "uuid_prefix": "transcript",
             "owner_columns": ["user_id"],
+            "target_id_column": "credential_id",
         },
         {
             "share_table": "4yr_transcript_shared",
-            "credential_table": "transcript",
+            "credential_table": "4yr_transcript",
             "credential_type": 2,
             "credential_id_columns": ["transcript_id"],
             "credentials_all_link_column": "transcripts",
             "uuid_prefix": "transcript",
             "owner_columns": ["user_id"],
+            "target_id_column": "credential_id",
         },
         {
             "share_table": "self_uploaded_transcript_share",
@@ -545,8 +587,11 @@ class CredentialsSharedMigrator(BaseMigrator):
                             chunk_context
                         )
 
-                        credential_path = credentials_all_row.get(
-                            "credential_path"
+                        credential_path = self._share_credential_path(
+                            source_config,
+                            source_share_link_id,
+                            credential_source_id,
+                            credentials_all_row
                         )
                         share_date = (
                             self._get_share_value(
@@ -1452,6 +1497,43 @@ class CredentialsSharedMigrator(BaseMigrator):
             or
             source_student.get("id")
         )
+
+    def _share_credential_path(
+        self,
+        source_config,
+        source_share_link_id,
+        credential_source_id,
+        credentials_all_row
+    ):
+
+        path_config = self.SHARE_PATHS.get(
+            source_config["share_table"]
+        )
+
+        if not path_config:
+
+            return credentials_all_row.get(
+                "credential_path"
+            )
+
+        path_id = (
+            source_share_link_id
+            if path_config["id_source"] == "share_link"
+            else
+            credential_source_id
+        )
+
+        if path_id is None:
+
+            return credentials_all_row.get(
+                "credential_path"
+            )
+
+        path = path_config["template"].format(
+            id=path_id
+        )
+
+        return f"{self.S3_BASE_URL}/{path}"
 
     def _get_share_value(
         self,
