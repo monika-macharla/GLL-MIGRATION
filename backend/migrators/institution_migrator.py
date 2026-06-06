@@ -130,49 +130,18 @@ class InstitutionMigrator(BaseMigrator):
                         ) if row_dict[address_table.c.id] else None,
                         'country': self._map_country(row_dict[country_table.c.country_code]) if row_dict[address_table.c.id] else 0,
                         'phone_number': row_dict[institution_table.c.phone_number],
-                        'legend': self._row_value(
-                            row_dict,
-                            institution_table,
-                            'legend_file_name'
-                        ),
+                        'legend': institution_table.c.legend_file_name,
                         'notification_email': row_dict[institution_table.c.notification_email],
                         'is_scholarship_enabled': bool(row_dict[institution_table.c.enable_scholarships]),
                         'is_transcript_enabled': bool(row_dict[institution_table.c.enable_transcript_share]),
-                        'ediSegment': self._row_value(
-                            row_dict,
-                            institution_table,
-                            'edi_segment_terminator'
-                        ),
-                        'ediField': self._row_value(
-                            row_dict,
-                            institution_table,
-                            'edi_field_terminator'
-                        ),
-                        'marketNotificationEmail': self._row_value(
-                            row_dict,
-                            institution_table,
-                            'mk_notification_email'
-                        ),
-                        'signTitle': self._row_value(
-                            row_dict,
-                            institution_table,
-                            'signature_title'
-                        ),
-                        'industry': self._map_industry(
-                            self._row_value(
-                                row_dict,
-                                institution_table,
-                                'company_type'
-                            )
-                        ),
-                        'isVirtualJobFairAdministrationEnabled': self._to_bool(
-                            self._row_value(
-                                row_dict,
-                                institution_table,
-                                'enable_virtual_job_fair'
-                            )
-                        ),
-                        'institution_status': 2 if row_dict[institution_table.c.active]==0 else 1,
+                        'isEdiEnabled': bool(row_dict.get(institution_table.c.enable_edi)) if hasattr(institution_table.c, 'enable_edi') else False,
+                        'ediSegment': row_dict.get(institution_table.c.edi_segment_terminator) if hasattr(institution_table.c, 'edi_segment_terminator') else None,
+                        'ediField': row_dict.get(institution_table.c.edi_field_terminator) if hasattr(institution_table.c, 'edi_field_terminator') else None,
+                        'marketNotificationEmail': row_dict.get(institution_table.c.mk_notification_email) if hasattr(institution_table.c, 'mk_notification_email') else None,
+                        'signTitle': row_dict.get(institution_table.c.signature_title) if hasattr(institution_table.c, 'signature_title') else None,
+                        'industry': self._map_industry(row_dict.get(institution_table.c.company_type) if hasattr(institution_table.c, 'company_type') else None),
+                        'isVirtualJobFairAdministrationEnabled': bool(row_dict.get(institution_table.c.enable_virtual_job_fair)) if hasattr(institution_table.c, 'enable_virtual_job_fair') else False,
+                        'institution_status': 1 if row_dict[institution_table.c.active] else 2,
                     }
                     self._set_if_column_exists(
                         mapped_row,
@@ -196,6 +165,50 @@ class InstitutionMigrator(BaseMigrator):
                             'nsc_receiver_id'
                         )
                     insert_data.append(mapped_row)
+    def _map_sub_type(self, institution_type, institution_sub_type):
+        # Normalize input
+        if institution_type:
+            institution_type = str(institution_type).strip().lower()
+        else:
+            institution_type = ''
+        # Treat None, empty, or whitespace as unspecified (0)
+        if not institution_sub_type or str(institution_sub_type).strip() == '':
+            sub_type = None
+        else:
+            sub_type = str(institution_sub_type).strip().lower()
+
+        if institution_type == 'university':
+            mapping = {
+                None: 0,
+                'high school': 1,
+                'community college': 2,
+                'higher education': 3,
+                'nsc': 4,
+                'college': 5,
+            }
+            return mapping.get(sub_type, 0)
+        elif institution_type == 'parentuniversity':
+            mapping = {
+                None: 0,
+                'community college': 1,
+                'independent school district': 2,
+            }
+            return mapping.get(sub_type, 0)
+        elif institution_type == 'serviceprovider':
+            mapping = {
+                None: 0,
+                'training': 1,
+                'edready': 2,
+            }
+            return mapping.get(sub_type, 0)
+        elif institution_type == 'regionalserviceprovider':
+            mapping = {
+                None: 0,
+                'esc': 1,
+            }
+            return mapping.get(sub_type, 0)
+        else:
+            return 0
 
             if insert_data:
                 dest_conn.execute(insert(dest_table), insert_data)
@@ -502,266 +515,33 @@ class InstitutionMigrator(BaseMigrator):
         if not company_type or str(company_type).strip() == '':
             return 0
         mapping = {
-            'accountingfinancebanking': 1,
-            'administrationhrlegal': 2,
-            'avadvertisingmarketingpr': 3,
-            'avadvertisingmarketingpublicrelations': 3,
+            'accounting, finance, banking': 1,
+            'administration, hr, legal': 2,
+            'av, advertising, marketing, pr': 3,
             'automotive': 4,
-            'aviationaerospace': 5,
-            'constructionarchitecture': 6,
-            'consultingservices': 7,
-            'educationtraining': 8,
-            'engineeringmanufacturing': 9,
+            'aviation, aerospace': 5,
+            'construction, architecture': 6,
+            'consulting services': 7,
+            'education, training': 8,
+            'engineering, manufacturing': 9,
             'entertainment': 10,
             'fashion': 11,
-            'governmentandpublicadministration': 12,
-            'governmentpublicadministration': 12,
+            'government and public administration': 12,
             'healthcare': 13,
-            'hospitalitytraveltourism': 14,
+            'hospitality, travel, tourism': 14,
             'insurance': 15,
-            'informationtechnologycybersecurity': 16,
-            'lawpublicsafetycorrectionssecurity': 17,
-            'logisticssupplychain': 18,
-            'logistics': 18,
+            'information technology, cybersecurity': 16,
+            'law, public safety, corrections, security': 17,
+            'logistics, supply chain': 18,
             'manufacturing': 19,
-            'mediacommunicationspublishing': 20,
-            'oilgaspowerutilities': 21,
-            'retailwholesale': 22,
-            'salesbusinessdevelopment': 23,
-            'scienceresearchdevelopment': 24,
-            'transportationwarehousingdistributionlogistics': 25,
-            'nonprofitentity': 26,
+            'media, communications, publishing': 20,
+            'oil, gas, power, utilities': 21,
+            'retail, wholesale': 22,
+            'sales, business development': 23,
+            'science, research, development': 24,
+            'transportation, warehousing, distribution, logistics': 25,
+            'non_profit_entity': 26,
         }
-        key = self._industry_key(company_type)
+        # Normalize and match ignoring case and whitespace
+        key = str(company_type).strip().lower()
         return mapping.get(key, 0)
-
-    def _industry_key(self, value):
-        return ''.join(
-            char
-            for char in str(value).strip().lower()
-            if char.isalnum()
-        )
-
-    def normalize(self, value):
-        return (
-            str(value or "")
-            .strip()
-            .lower()
-            .replace(" ", "")
-        )
-
-    def _update_existing_institutions(self, dest_conn) -> int:
-        logger.info("Updating existing institutions in target database...")
-        
-        # Manually reflect tables to avoid FK issues
-        institution_table = self._manual_reflect('institution', self.source_engine, self.metadata_source)
-        dest_table = self._manual_reflect('institutions', self.dest_engine, self.metadata_dest)
-        parent_institution_column = self._parent_institution_column(
-            institution_table
-        )
-        
-        if not dest_table.columns:
-            logger.error("Destination table 'institutions' not found or has no columns.")
-            raise ValueError("Destination table 'institutions' not found.")
-
-        # Get all existing institutions from target db
-        # We need their uuid and name to match them
-        with self.dest_engine.connect() as dest_conn_read:
-            dest_results = dest_conn_read.execute(select(dest_table.c.uuid, dest_table.c.name))
-            dest_rows = dest_results.all()
-            
-        if not dest_rows:
-            logger.info("No institutions found in target database to update.")
-            return 0
-            
-        # Map normalized target name -> destination row dict
-        dest_map = {}
-        for row in dest_rows:
-            r_dict = row._mapping
-            name = r_dict.get('name')
-            if name:
-                norm_name = self.normalize(name)
-                dest_map[norm_name] = r_dict
-
-        # Load all source institutions
-        with self.source_engine.connect() as source_conn:
-            source_results = source_conn.execute(
-                select(institution_table).where(
-                    self._is_main_institution_condition(
-                        institution_table,
-                        parent_institution_column
-                    )
-                )
-            )
-            source_rows = source_results.all()
-
-        if not source_rows:
-            logger.info("No institutions found in source database.")
-            return 0
-
-        update_count = 0
-        upload_tasks = []
-        
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            for s_row in source_rows:
-                s_dict = s_row._mapping
-                s_name = s_dict.get('name')
-                if not s_name:
-                    continue
-                norm_s_name = self.normalize(s_name)
-                if norm_s_name not in dest_map:
-                    continue
-                
-                dest_inst = dest_map[norm_s_name]
-                dest_uuid = dest_inst.get('uuid')
-                
-                seal_val = self._row_value(
-                    s_dict,
-                    institution_table,
-                    'institution_seal'
-                )
-                logo_val = self._row_value(
-                    s_dict,
-                    institution_table,
-                    'logo'
-                )
-                
-                seal_future = executor.submit(
-                    self.storage.upload_base64, 
-                    seal_val, 
-                    f"seals/{dest_uuid}.png"
-                )
-                logo_future = executor.submit(
-                    self.storage.upload_base64, 
-                    logo_val, 
-                    f"logos/{dest_uuid}.png"
-                )
-                
-                upload_tasks.append((dest_uuid, s_dict, seal_future, logo_future))
-                
-            for dest_uuid, s_dict, seal_future, logo_future in upload_tasks:
-                seal_url = seal_future.result()
-                logo_url = logo_future.result()
-                
-                sub_type_val = self._map_sub_type(
-                    self._row_value(
-                        s_dict,
-                        institution_table,
-                        'institution_type'
-                    ),
-                    self._row_value(
-                        s_dict,
-                        institution_table,
-                        'institution_sub_type'
-                    )
-                )
-                
-                legend_val = self._row_value(
-                    s_dict,
-                    institution_table,
-                    'legend_file_name'
-                )
-                
-                is_transcript_enabled_val = self._to_bool(
-                    self._row_value(
-                        s_dict,
-                        institution_table,
-                        'enable_transcript_share'
-                    )
-                )
-                
-                is_edi_enabled_val = self._to_bool(
-                    self._row_value(
-                        s_dict,
-                        institution_table,
-                        'enable_edi'
-                    )
-                )
-                
-                edi_segment_val = self._row_value(
-                    s_dict,
-                    institution_table,
-                    'edi_segment_terminator'
-                )
-                
-                edi_field_val = self._row_value(
-                    s_dict,
-                    institution_table,
-                    'edi_field_terminator'
-                )
-                
-                market_notification_email_val = self._row_value(
-                    s_dict,
-                    institution_table,
-                    'mk_notification_email'
-                )
-                
-                sign_title_val = self._row_value(
-                    s_dict,
-                    institution_table,
-                    'signature_title'
-                )
-                
-                industry_val = self._map_industry(
-                    self._row_value(
-                        s_dict,
-                        institution_table,
-                        'company_type'
-                    )
-                )
-                
-                is_virtual_job_fair_val = self._to_bool(
-                    self._row_value(
-                        s_dict,
-                        institution_table,
-                        'enable_virtual_job_fair'
-                    )
-                )
-
-                update_values = {
-                    'sub_type': sub_type_val,
-                    'legend': legend_val,
-                    'is_transcript_enabled': is_transcript_enabled_val,
-                    'ediSegment': edi_segment_val,
-                    'ediField': edi_field_val,
-                    'marketNotificationEmail': market_notification_email_val,
-                    'signTitle': sign_title_val,
-                    'industry': industry_val,
-                    'isVirtualJobFairAdministrationEnabled': is_virtual_job_fair_val,
-                    'logo': logo_url,
-                    'seal': seal_url
-                }
-
-                self._set_if_column_exists(
-                    update_values,
-                    dest_table,
-                    (
-                        'is_edi_enabled',
-                        'isEdiEnabled'
-                    ),
-                    is_edi_enabled_val
-                )
-
-                if 'qual_code' in dest_table.c:
-                    update_values['qual_code'] = self._row_value(
-                        s_dict,
-                        institution_table,
-                        'qual_code'
-                    )
-
-                if 'nsc_receiver_id' in dest_table.c:
-                    update_values['nsc_receiver_id'] = self._row_value(
-                        s_dict,
-                        institution_table,
-                        'nsc_receiver_id'
-                    )
-                
-                update_stmt = dest_table.update().where(
-                    dest_table.c.uuid == dest_uuid
-                ).values(update_values)
-                
-                dest_conn.execute(update_stmt)
-                update_count += 1
-                
-        logger.info(f"Successfully updated {update_count} existing institutions.")
-        return update_count
