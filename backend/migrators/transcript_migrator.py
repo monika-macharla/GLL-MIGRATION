@@ -4,8 +4,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    exists,
     inspect,
     insert,
+    or_,
     select,
 )
 
@@ -16,7 +18,17 @@ logger = logging.getLogger(__name__)
 
 class TranscriptMigrator(BaseMigrator):
 
-    SOURCE_TABLE = "transcript"
+    SOURCE_TABLE = "credential"
+    SOURCE_TRANSCRIPT_TABLES = {
+        "highschool": "hs_transcript",
+        "communitycollege": "cc_transcript",
+        "fouryear": "4yr_transcript",
+    }
+    SOURCE_TRANSCRIPT_PATHS = {
+        "highschool": ("highschool", "pdf_transcript_student"),
+        "communitycollege": ("community", "pdf_transcript_student"),
+        "fouryear": ("fouryear", "pdf_transcript"),
+    }
     TRANSCRIPT_TABLE_CANDIDATES = [
         "credentials_transcripts",
         "credentials_transcript",
@@ -68,6 +80,17 @@ class TranscriptMigrator(BaseMigrator):
             self.source_engine,
             self.metadata_source
         )
+
+        source_transcript_tables = {
+            source_type: self._manual_reflect(
+                table_name,
+                self.source_engine,
+                self.metadata_source
+            )
+            for source_type, table_name in (
+                self.SOURCE_TRANSCRIPT_TABLES.items()
+            )
+        }
 
         source_student_table = self._manual_reflect(
             "gl_student",
@@ -183,6 +206,7 @@ class TranscriptMigrator(BaseMigrator):
         nullable_missing_source_user = 0
         nullable_missing_destination_user = 0
         skipped_missing_institution = 0
+        nullable_missing_credential_id = 0
         skipped_existing = 0
         row_error_count = 0
 
@@ -217,7 +241,11 @@ class TranscriptMigrator(BaseMigrator):
                         transcript_table
                     )
                     .where(
-                        transcript_table.c.id > last_source_id
+                        transcript_table.c.id > last_source_id,
+                        self._transcript_source_filter(
+                            transcript_table,
+                            source_transcript_tables
+                        )
                     )
                     .order_by(
                         transcript_table.c.id
@@ -263,17 +291,6 @@ class TranscriptMigrator(BaseMigrator):
                 last_source_id = source_transcript_id
 
                 try:
-
-                    legacy_credential_path = self._legacy_credential_path(
-                        source_transcript_id
-                    )
-
-                    if legacy_credential_path in existing_credential_paths:
-
-                        skipped_count += 1
-                        skipped_existing += 1
-
-                        continue
 
                     source_student_id = self._get_source_value(
                         row_dict,
@@ -369,11 +386,18 @@ class TranscriptMigrator(BaseMigrator):
                     credential_path = self._credential_path(
                         source_transcript_id,
                         row_dict,
-                        transcript_table,
-                        institution_name
+                        transcript_table
                     )
 
-                    if credential_path in existing_credential_paths:
+                    if not credential_path:
+
+                        nullable_missing_credential_id += 1
+
+                    if (
+                        credential_path
+                        and
+                        credential_path in existing_credential_paths
+                    ):
 
                         skipped_count += 1
                         skipped_existing += 1
@@ -537,9 +561,11 @@ class TranscriptMigrator(BaseMigrator):
                         )
                     )
 
-                    existing_credential_paths.add(
-                        credential_path
-                    )
+                    if credential_path:
+
+                        existing_credential_paths.add(
+                            credential_path
+                        )
 
                 except Exception as error:
 
@@ -617,6 +643,8 @@ class TranscriptMigrator(BaseMigrator):
             f"{nullable_missing_destination_user}, "
             f"skipped_missing_institution="
             f"{skipped_missing_institution}, "
+            f"nullable_missing_credential_id="
+            f"{nullable_missing_credential_id}, "
             f"skipped_existing={skipped_existing}, "
             f"row_errors={row_error_count}"
         )
@@ -1267,90 +1295,91 @@ class TranscriptMigrator(BaseMigrator):
         self,
         source_transcript_id,
         row_dict,
-        transcript_table,
-        institution_name
+        transcript_table
     ):
 
-        prefix = self._credential_path_prefix(
+        source_credential_id = self._get_source_value(
             row_dict,
             transcript_table,
-            institution_name
+            "id"
         )
+
+        if not source_credential_id:
+
+            logger.warning(
+                "Transcript source id "
+                f"{source_transcript_id} is missing credential id; "
+                "credential_path will be NULL"
+            )
+
+            return None
+
+        source_type = self._normalize(
+            self._get_source_value(
+                row_dict,
+                transcript_table,
+                "type"
+            )
+        )
+
+        path_parts = self.SOURCE_TRANSCRIPT_PATHS.get(
+            source_type
+        )
+
+        if not path_parts:
+
+            logger.warning(
+                "Transcript source id "
+                f"{source_transcript_id} has unsupported "
+                f"credential type {source_type}; "
+                "credential_path will be NULL"
+            )
+
+            return None
+
+        path_prefix, file_name = path_parts
 
         return (
             f"{self.S3_BASE_URL}/"
-            f"{prefix}/"
-            f"{source_transcript_id}/"
-            "pdf_transcript"
+            f"{path_prefix}/"
+            f"{source_credential_id}/"
+            f"{file_name}"
         )
 
-    def _legacy_credential_path(
+    def _transcript_source_filter(
         self,
-        source_transcript_id
+        credential_table,
+        source_transcript_tables
     ):
 
-        return (
-            f"transcript/{source_transcript_id}/credential_data"
-        )
+        filters = []
 
-    def _credential_path_prefix(
-        self,
-        row_dict,
-        transcript_table,
-        institution_name
-    ):
-
-        source_name = self._get_source_value(
-            row_dict,
-            transcript_table,
-            "name"
-        )
-
-        combined_name = self._normalize_words(
-            f"{source_name or ''} {institution_name or ''}"
-        )
-
-        if (
-            "enrollmentverification" in combined_name
-            or
-            "enrollmentcertificate" in combined_name
+        for source_type, source_table in (
+            source_transcript_tables.items()
         ):
 
-            return "enrollment_verification_cert"
-
-        if (
-            "asia" in combined_name
-            and
-            (
-                "highschool" in combined_name
-                or
-                "secondary" in combined_name
+            filters.append(
+                (
+                    credential_table.c.type == source_type
+                )
+                &
+                exists(
+                    select(
+                        1
+                    )
+                    .select_from(
+                        source_table
+                    )
+                    .where(
+                        source_table.c.credential_id
+                        == credential_table.c.id
+                    )
+                )
             )
-        ):
 
-            return "asia-hs"
-
-        if (
-            "highschool" in combined_name
-            or
-            "secondaryschool" in combined_name
-            or
-            "k12" in combined_name
-        ):
-
-            return "highschool"
-
-        if (
-            "community" in combined_name
-            or
-            "dallascollege" in combined_name
-            or
-            "dallascountycommunitycollege" in combined_name
-        ):
-
-            return "community"
-
-        return "fouryear"
+        return or_(
+            *filters
+        )
 
     def _get_source_value(
         self,
@@ -1444,32 +1473,3 @@ class TranscriptMigrator(BaseMigrator):
             .lower()
             .replace(" ", "")
         )
-
-    def _normalize_words(
-        self,
-        value
-    ):
-
-        normalized = self._normalize(
-            value
-        )
-
-        for character in [
-            "-",
-            "_",
-            ".",
-            ",",
-            "'",
-            "\"",
-            "/",
-            "\\",
-            "(",
-            ")",
-        ]:
-
-            normalized = normalized.replace(
-                character,
-                ""
-            )
-
-        return normalized
