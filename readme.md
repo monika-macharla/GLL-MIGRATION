@@ -40,6 +40,7 @@ gl_parent_student                       parent_student
 
 
 17. transcript                           credentials_transcript, credentials_all
+                                         credential_path = https://greenlightlocker-com.s3.us-west-2.amazonaws.com/highschool/{transcript.credential_id}/pdf_transcript_student
 18. certificate                     p     credentials_certifications, credentials_all
 
 
