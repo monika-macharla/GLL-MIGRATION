@@ -709,3 +709,37 @@ user_enrollments
  ======================================================================   
     resume                                                          credentials_resume, credentials_all (already code is there)
     recommendation_letter,recommendation_letter_request             credentials_recommendation_letter. credentials_all(need to write a code)
+
+
+
+
+Shared credential destination URL mapping:
+
+Base S3 URL:
+`https://greenlightlocker-com.s3.us-west-2.amazonaws.com`
+
+| Type | Credential | Source | Source table | ID used | Destination S3 URL | Verify URL |
+|---|---|---|---|---|---|---|
+| HS | High School Transcript | share | hs_transcript_shared | hs_transcript_shared.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/highschoolshare/{id}/pdf_transcript` | `/verify?type=HS&trackId={track_id}` |
+| CTC | Community College Transcript | share | cc_transcript_shared | cc_transcript_shared.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/communitycollegeshare/{id}/pdf_transcript` | `/verify?type=CTC&trackId={track_id}` |
+| HE | Four-Year College Transcript | share | 4yr_transcript_shared | 4yr_transcript_shared.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/fouryear-share/{id}/pdf_transcript` | `/verify?type=HE&trackId={track_id}` |
+| B | Badge | share | badge_shared | badge.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/badges/{badge_id}/pdf_badge` | `/verify?type=B&trackId={track_id}` |
+| CC | Transcript (General) | share | transcript_shared | transcript_shared.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/shared/{id}/pdf_transcript` | `/verify?type=CC&trackId={track_id}` |
+| C | Certificate | share | certificate_share | certificate.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/certificate/{certificate_id}/certificate_data` | `/verify?type=C&trackId={track_id}` |
+| RL | Recommendation Letter | share | recommendation_letter_share | recommendation_letter.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/recommendationletter/{id}/file` | `/verify?type=RL&trackId={track_id}` |
+| R | Resume | share | resume_share | resume.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/resume/{resume_id}/resume_data` | `/verify?type=R&trackId={track_id}` |
+| AP | Accomplishment Portfolio | share | accomplishment_portfolio_share | accomplishment_portfolio.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/accomplishmentShare/{id}/pdf_accomplishment` | `/verify?type=AP&trackId={track_id}` |
+| S | SAR Report | share | sar_report_share | credential.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/sar/{credential_id}/sar_pdf` | `/verify?type=S&trackId={track_id}` |
+| OD | Other Credentials | share | other_credential_share | other_credential.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/other_credential/{id}/credential_data` | `/verify?type=OD&trackId={track_id}` |
+| AHS | Asia Highschool | share | credential_shared | credential_shared.id | `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/credentialshare/{id}/pdf_transcript` | `/verify?type=AHS&trackId={track_id}` |
+
+Special case formats:
+
+SPEEDE / EDI formats:
+- High School SPEEDE path: `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/speede/{share.id}/{student.firstName}{student.lastName}Edi.edi`
+- Four-Year College SPEEDE path: `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/speede/{share.id}/{student.firstName}{student.lastName}Edi.edi`
+- White spaces and single quotes are stripped from the student's name in EDI file names.
+
+NSC receiver formats:
+- NSC S3 path: `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/nsc/TRANSCRIPT_TO-{nscReceiverId}_{YYYYMMDD}_GreenLight_{student.lastName}.pdf`
+- Applicable types: HS, CTC, HE
