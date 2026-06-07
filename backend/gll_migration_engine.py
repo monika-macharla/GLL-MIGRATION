@@ -23,6 +23,8 @@ from migrators import (
 
     PasswordMigrator,
 
+    PasswordExpirationMigrator,
+
     UserInstitutionMigrator,
 
     UserEnrollmentMigrator,
@@ -456,6 +458,18 @@ class GLLMigrationEngine:
 
                 "user_hashed_password"
             ]
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # PASSWORD EXPIRATION MIGRATION
+        # -----------------------------------------
+
+        password_expiration_selected = any(
+
+            m.get("destination_table")
+            == "user_hashed_password_expires_at"
 
             for m in mappings
         )
@@ -1599,6 +1613,11 @@ class GLLMigrationEngine:
             f"{institution_sftp_credentials_selected}"
         )
 
+        logger.info(
+            f"password_expiration_selected="
+            f"{password_expiration_selected}"
+        )
+
         # -----------------------------------------
         # Add UsersMigrator
         # -----------------------------------------
@@ -1716,6 +1735,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 PasswordMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add PasswordExpirationMigrator
+        # -----------------------------------------
+
+        if password_expiration_selected:
+
+            logger.info(
+                "Adding PasswordExpirationMigrator"
+            )
+
+            migrators.append(
+
+                PasswordExpirationMigrator(
 
                     self,
 

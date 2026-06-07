@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Database, Server, User, Lock, ArrowRight, Play, CheckCircle2, XCircle, Loader2, Plus, Trash2, Settings2, Clock, RotateCcw } from 'lucide-react';
+import { Database, Play, CheckCircle2, XCircle, Loader2, Plus, Trash2, Settings2, Clock, RotateCcw } from 'lucide-react';
 
 interface DBConfig {
   db_type: string;
@@ -30,6 +30,12 @@ interface HistoryLog {
   status: string;
   records: number;
   error?: string;
+}
+
+interface TestResults {
+  source: string;
+  dest: string;
+  lookup: Record<number, string>;
 }
 
 function App() {
@@ -75,7 +81,7 @@ const [source, setSource] = useState<DBConfig>({
     message: ''
   });
 
-  const [testResults, setTestResults] = useState<any>({
+  const [testResults, setTestResults] = useState<TestResults>({
   source: '',
   dest: '',
   lookup: {}
@@ -240,12 +246,6 @@ const [source, setSource] = useState<DBConfig>({
         newMappings[index].destination_table = value;
       }
     }
-    setMappings(newMappings);
-  };
-
-  const addColumnMapping = (tableIndex: number, srcCol: string, destCol: string) => {
-    const newMappings = [...mappings];
-    newMappings[tableIndex].columns = { ...newMappings[tableIndex].columns, [srcCol]: destCol };
     setMappings(newMappings);
   };
 
@@ -558,7 +558,11 @@ const [source, setSource] = useState<DBConfig>({
               </div>
             ) : (
               mappings.map((mapping, idx) => {
-                const isGLL = ['institutions', 'institution_campuses'].includes(mapping.destination_table);
+                const isGLL = [
+                  'institutions',
+                  'institution_campuses',
+                  'user_hashed_password_expires_at'
+                ].includes(mapping.destination_table);
                 return (
                   <div key={idx} style={{ marginBottom: '2rem', padding: '1.5rem', background: 'hsla(var(--muted), 0.3)', borderRadius: 'var(--radius)', border: '1px solid hsl(var(--border))' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -601,6 +605,7 @@ const [source, setSource] = useState<DBConfig>({
                               <optgroup label="GLL Targets">
                                 <option value="institutions">institutions (Main)</option>
                                 <option value="institution_campuses">institution_campuses</option>
+                                <option value="user_hashed_password_expires_at">password expires_at fix</option>
                               </optgroup>
                               <optgroup label="Detected Tables">
                                 {Object.keys(destSchema).map(t => <option key={t} value={t}>{t}</option>)}

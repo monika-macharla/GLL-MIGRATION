@@ -266,6 +266,8 @@ async def migrate(request: MigrationRequest):
                 "password",
 
                 "user_hashed_password",
+
+                "user_hashed_password_expires_at",
                 
                 "user_institution",
 

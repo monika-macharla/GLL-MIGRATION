@@ -20,6 +20,7 @@ gl_parent_student                       parent_student
 
 7. jhi_user                            user_hashed_password(gllauthservicemigration)
 
+jhi_user                               user_hashed_password_expires_at
 8. enrollment                          user_enrollments(gllauthservicemigration)
 
 
