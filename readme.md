@@ -99,6 +99,27 @@ jhi_user                               user_hashed_password_expires_at
 
 18.
 
+Blockchain Mapping CSV Import
+------------------------------------------------------------
+
+Import every CSV file from a folder into `gllreportsdevmigration.blockchain_mapping`:
+
+```bash
+python3 backend/import_blockchain_mapping_csv.py /home/xelpmoc/Documents/Projects/GLL-CODE/blockchain/pdf-hash-batch-outputs
+```
+
+The script reads MySQL connection settings from `destination_db` in `config.yaml`.
+You can override the target database or credentials when needed:
+
+```bash
+MYSQL_HOST=localhost MYSQL_USER=root MYSQL_PASSWORD=your_password \
+python3 backend/import_blockchain_mapping_csv.py /path/to/csv-folder \
+  --database gllreportsdevmigration
+```
+
+CSV headers should match columns in `blockchain_mapping`. Extra CSV columns are
+ignored, blank values are imported as `NULL`, and files are inserted in batches.
+
 
 
 

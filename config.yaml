@@ -9,11 +9,11 @@ source_db:
 
 destination_db:
   type: "mysql"
-  host: "localhost"
-  port: 3306
-  username: "root"
-  password: "your_password"
-  database: "dest_db"
+  host: "16.58.172.0"
+  port: 3307
+  username: "uat-gll"
+  password: "GLLuAtS3rver@2026"
+  database: "gllreports"
 
 limit: 100
 
