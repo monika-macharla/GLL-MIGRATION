@@ -50,24 +50,24 @@ const [source, setSource] = useState<DBConfig>({
 
   const [dest, setDest] = useState<DBConfig>({
     db_type: 'mysql',
-    host: '52.14.86.71',
+    host: '16.58.172.0',
     port: 3307,
-    username: 'glldev',
-    password: 'G11d4V@6202',
-    // database: 'gllauthservicedevmigration'
-    database: 'gllreportsdevmigration'
-    // database: 'glldataingestiondevmigration' 
+    username: 'uat-gll',
+    password: 'GLLuAtS3rver@2026',
+    database: 'gllauthserviceuatmigration'
+    // database: 'gllreportsuatmigration'
+    // database: 'glldataingestionuatmigration' 
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
   {
     name: 'auth_db',
     db_type: 'mysql',
-    host: '52.14.86.71',
+    host: '16.58.172.0',
     port: 3307,
-    username: 'glldev',
-    password: 'G11d4V@6202',
-    database: 'gllauthservicedevmigration'
+    username: 'uat-gll',
+    password: 'GLLuAtS3rver@2026',
+    database: 'gllauthserviceuatmigration'
   }
 ]);
 
