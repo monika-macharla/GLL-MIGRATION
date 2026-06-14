@@ -1070,10 +1070,17 @@ class UsersMigrator(BaseMigrator):
                                 source_user_type
                                 == "student"
                             ),
+
+                            "is_demographic": 0,
                         }
 
                         users_insert_data.append(
-                            mapped_user_row
+                            {
+                                column_name: value
+                                for column_name, value
+                                in mapped_user_row.items()
+                                if column_name in users_table.c
+                            }
                         )
 
                         chunk_users_prepared += 1

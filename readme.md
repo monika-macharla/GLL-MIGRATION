@@ -7,7 +7,7 @@ source db:                          destination db
 
 2. institution                         institutions,campuses(gllauthservicemigration)
 
-3. gl_user                             users,user_role,institution_user(gllauthservicemigration)
+3. gl_user                             users(gllauthservicemigration)
 
 4. gl_user                              user_role
 
