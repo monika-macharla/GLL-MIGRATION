@@ -36,12 +36,16 @@ jhi_user                               user_hashed_password_expires_at
 
 14. institution_user                  user_campus
 
+16. scholarship_activity             scholarship_user_activity
+
+17. esc_sftp_user                    institution_sftp_credentials
+
 ==========================================================================================================================
 2. gllreports
 
 
 17. transcript                           credentials_transcript, credentials_all
-                                         credential_path = https://greenlightlocker-com.s3.us-west-2.amazonaws.com/highschool/{transcript.credential_id}/pdf_transcript_student
+                                         credential_path = /uploads/highschool/{transcript.credential_id}/pdf_transcript_student
 18. certificate                     p     credentials_certifications, credentials_all
 
 
@@ -55,9 +59,7 @@ jhi_user                               user_hashed_password_expires_at
 
 15. employment_history                employment
 
-16. scholarship_activity             scholarship_user_activity
 
-17. esc_sftp_user                    institution_sftp_credentials
 
 
 

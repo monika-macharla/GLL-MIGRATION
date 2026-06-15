@@ -24,10 +24,15 @@ class TranscriptMigrator(BaseMigrator):
         "communitycollege": "cc_transcript",
         "fouryear": "4yr_transcript",
     }
-    SOURCE_TRANSCRIPT_PATHS = {
+    SOURCE_TRANSCRIPT_DOWNLOAD_PATHS = {
+        "highschool": ("highschool", "pdf_transcript"),
+        "communitycollege": ("community", "pdf_transcript"),
+        "fouryear": ("fouryear", "pdf_transcript"),
+    }
+    SOURCE_TRANSCRIPT_VIEW_PATHS = {
         "highschool": ("highschool", "pdf_transcript_student"),
         "communitycollege": ("community", "pdf_transcript_student"),
-        "fouryear": ("fouryear", "pdf_transcript"),
+        "fouryear": ("fouryear", "pdf_transcript_student"),
     }
     TRANSCRIPT_TABLE_CANDIDATES = [
         "credentials_transcripts",
@@ -36,7 +41,13 @@ class TranscriptMigrator(BaseMigrator):
     CREDENTIALS_TABLE = "credentials_all"
     CREDENTIAL_TYPE = 2
     CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED = 2
-    S3_BASE_URL = "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    UUID_NAMESPACE = uuid.UUID(
+        "55fa6c2d-84d5-5bd8-b0f3-6a1d8b6c91f4"
+    )
+    LEGACY_S3_BASE_URL = (
+        "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    )
+    UPLOADS_PREFIX = "/uploads"
     DYNAMIC_USER_VALUE = "DYNAMIC"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 10000
@@ -330,27 +341,34 @@ class TranscriptMigrator(BaseMigrator):
                         else None
                     )
 
-                    destination_user_uuid = None
-
-                    if source_username:
-
-                        destination_user_uuid = (
-                            destination_user_lookup.get(
-                                self._normalize(source_username)
-                            )
+                    destination_user_uuid = (
+                        self._destination_user_uuid_from_source_user(
+                            source_gl_user,
+                            source_gl_user_id
                         )
+                    )
 
                     if not destination_user_uuid:
 
                         if source_username:
 
+                            destination_user_uuid = (
+                                destination_user_lookup.get(
+                                    self._normalize(source_username)
+                                )
+                            )
+
+                        if not destination_user_uuid and source_username:
+
                             nullable_missing_destination_user += 1
 
-                        else:
+                        elif not destination_user_uuid:
 
                             nullable_missing_source_user += 1
 
-                        destination_user_uuid = self.DYNAMIC_USER_VALUE
+                        if not destination_user_uuid:
+
+                            destination_user_uuid = self.DYNAMIC_USER_VALUE
 
                     institution_uuid = (
                         institution_lookup.get(
@@ -388,15 +406,28 @@ class TranscriptMigrator(BaseMigrator):
                         row_dict,
                         transcript_table
                     )
+                    view_transcript = self._view_transcript_path(
+                        source_transcript_id,
+                        row_dict,
+                        transcript_table
+                    )
 
                     if not credential_path:
 
                         nullable_missing_credential_id += 1
 
                     if (
-                        credential_path
-                        and
-                        credential_path in existing_credential_paths
+                        (
+                            credential_path
+                            and
+                            credential_path in existing_credential_paths
+                        )
+                        or
+                        (
+                            view_transcript
+                            and
+                            view_transcript in existing_credential_paths
+                        )
                     ):
 
                         skipped_count += 1
@@ -474,6 +505,7 @@ class TranscriptMigrator(BaseMigrator):
                         "status": status,
                         "credential_type": self.CREDENTIAL_TYPE,
                         "credential_path": credential_path,
+                        "view_transcript": view_transcript,
                         "enrollment_code": enrollment_code,
                         "created_by": destination_user_uuid,
                         "updated_by": destination_user_uuid,
@@ -565,6 +597,12 @@ class TranscriptMigrator(BaseMigrator):
 
                         existing_credential_paths.add(
                             credential_path
+                        )
+
+                    if view_transcript:
+
+                        existing_credential_paths.add(
+                            view_transcript
                         )
 
                 except Exception as error:
@@ -1117,6 +1155,38 @@ class TranscriptMigrator(BaseMigrator):
                         existing_paths.add(
                             credential_path
                         )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
+                        )
+
+            if "view_transcript" in transcript_dest_table.c:
+
+                rows = conn.execute(
+                    select(
+                        transcript_dest_table.c.view_transcript
+                    ).where(
+                        transcript_dest_table.c.deleted_at.is_(None)
+                    )
+                ).fetchall()
+
+                for row in rows:
+
+                    view_transcript = row._mapping.get(
+                        transcript_dest_table.c.view_transcript
+                    )
+
+                    if view_transcript:
+
+                        existing_paths.add(
+                            view_transcript
+                        )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                view_transcript
+                            )
+                        )
 
             if "credential_path" in credentials_table.c:
 
@@ -1139,6 +1209,11 @@ class TranscriptMigrator(BaseMigrator):
 
                         existing_paths.add(
                             credential_path
+                        )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
                         )
 
         logger.info(
@@ -1258,6 +1333,51 @@ class TranscriptMigrator(BaseMigrator):
             )
         )
 
+    def _destination_user_uuid_from_source_user(
+        self,
+        source_gl_user,
+        source_gl_user_id
+    ):
+
+        if not source_gl_user and source_gl_user_id is None:
+
+            return None
+
+        source_jhi_user_id = (
+            source_gl_user.get("user_id")
+            if source_gl_user
+            else None
+        )
+
+        if source_jhi_user_id is not None:
+
+            return self._stable_uuid(
+                "gl_user.user_id",
+                source_jhi_user_id
+            )
+
+        if source_gl_user_id is not None:
+
+            return self._stable_uuid(
+                "gl_user.id",
+                source_gl_user_id
+            )
+
+        return None
+
+    def _stable_uuid(
+        self,
+        key_type,
+        key_value
+    ):
+
+        return str(
+            uuid.uuid5(
+                self.UUID_NAMESPACE,
+                f"{key_type}:{key_value}"
+            )
+        )
+
     def _fallback_student_user_name(
         self,
         row_dict,
@@ -1298,6 +1418,38 @@ class TranscriptMigrator(BaseMigrator):
         transcript_table
     ):
 
+        return self._transcript_storage_path(
+            source_transcript_id,
+            row_dict,
+            transcript_table,
+            self.SOURCE_TRANSCRIPT_DOWNLOAD_PATHS,
+            "credential_path"
+        )
+
+    def _view_transcript_path(
+        self,
+        source_transcript_id,
+        row_dict,
+        transcript_table
+    ):
+
+        return self._transcript_storage_path(
+            source_transcript_id,
+            row_dict,
+            transcript_table,
+            self.SOURCE_TRANSCRIPT_VIEW_PATHS,
+            "view_transcript"
+        )
+
+    def _transcript_storage_path(
+        self,
+        source_transcript_id,
+        row_dict,
+        transcript_table,
+        path_mapping,
+        path_label
+    ):
+
         source_credential_id = self._get_source_value(
             row_dict,
             transcript_table,
@@ -1309,7 +1461,7 @@ class TranscriptMigrator(BaseMigrator):
             logger.warning(
                 "Transcript source id "
                 f"{source_transcript_id} is missing credential id; "
-                "credential_path will be NULL"
+                f"{path_label} will be NULL"
             )
 
             return None
@@ -1322,7 +1474,7 @@ class TranscriptMigrator(BaseMigrator):
             )
         )
 
-        path_parts = self.SOURCE_TRANSCRIPT_PATHS.get(
+        path_parts = path_mapping.get(
             source_type
         )
 
@@ -1332,7 +1484,7 @@ class TranscriptMigrator(BaseMigrator):
                 "Transcript source id "
                 f"{source_transcript_id} has unsupported "
                 f"credential type {source_type}; "
-                "credential_path will be NULL"
+                f"{path_label} will be NULL"
             )
 
             return None
@@ -1340,11 +1492,37 @@ class TranscriptMigrator(BaseMigrator):
         path_prefix, file_name = path_parts
 
         return (
-            f"{self.S3_BASE_URL}/"
+            f"{self.UPLOADS_PREFIX}/"
             f"{path_prefix}/"
             f"{source_credential_id}/"
             f"{file_name}"
         )
+
+    def _canonical_credential_path(
+        self,
+        credential_path
+    ):
+
+        if not credential_path:
+
+            return credential_path
+
+        path = str(
+            credential_path
+        ).strip()
+
+        legacy_prefix = f"{self.LEGACY_S3_BASE_URL}/"
+
+        if path.startswith(
+            legacy_prefix
+        ):
+
+            return (
+                f"{self.UPLOADS_PREFIX}/"
+                f"{path[len(legacy_prefix):]}"
+            )
+
+        return path
 
     def _transcript_source_filter(
         self,
