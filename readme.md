@@ -55,7 +55,7 @@ jhi_user                               user_hashed_password_expires_at
 15. recommendation_letter,recommendation_letter_request             credentials_recommendation_letters. credentials_all
 
 16. other-credentials                    self-uploads, credentials_all
-19. badge_shared                         credentials_shared,students_credentials_share_history
+19. badge_shared                         credentials_shared
 
 15. employment_history                employment
 

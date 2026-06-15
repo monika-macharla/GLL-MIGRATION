@@ -23,7 +23,10 @@ class SelfUploadMigrator(BaseMigrator):
     CREDENTIAL_TYPE = 5
     CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED = 2
     DYNAMIC_VALUE = "DYNAMIC"
-    S3_BASE_URL = "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    LEGACY_S3_BASE_URL = (
+        "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    )
+    UPLOADS_PREFIX = "/uploads"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 10000
 
@@ -889,6 +892,11 @@ class SelfUploadMigrator(BaseMigrator):
                         existing_paths.add(
                             credential_path
                         )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
+                        )
 
             if "file_path" in self_upload_table.c:
 
@@ -908,6 +916,11 @@ class SelfUploadMigrator(BaseMigrator):
 
                         existing_paths.add(
                             file_path
+                        )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                file_path
+                            )
                         )
 
             if "credential_path" in credentials_table.c:
@@ -931,6 +944,11 @@ class SelfUploadMigrator(BaseMigrator):
 
                         existing_paths.add(
                             credential_path
+                        )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
                         )
 
         logger.info(
@@ -978,9 +996,35 @@ class SelfUploadMigrator(BaseMigrator):
     ):
 
         return (
-            f"{self.S3_BASE_URL}/other_credential/"
+            f"{self.UPLOADS_PREFIX}/other_credential/"
             f"{source_other_credential_id}/credential_data"
         )
+
+    def _canonical_credential_path(
+        self,
+        credential_path
+    ):
+
+        if not credential_path:
+
+            return credential_path
+
+        path = str(
+            credential_path
+        ).strip()
+
+        legacy_prefix = f"{self.LEGACY_S3_BASE_URL}/"
+
+        if path.startswith(
+            legacy_prefix
+        ):
+
+            return (
+                f"{self.UPLOADS_PREFIX}/"
+                f"{path[len(legacy_prefix):]}"
+            )
+
+        return path
 
     def _map_document_type(
         self,

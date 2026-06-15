@@ -26,7 +26,10 @@ class DigitalBadgesMigrator(BaseMigrator):
     CREDENTIAL_TYPE = 3
     CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED = 2
     DYNAMIC_VALUE = "DYNAMIC"
-    S3_BASE_URL = "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    LEGACY_S3_BASE_URL = (
+        "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    )
+    UPLOADS_PREFIX = "/uploads"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 10000
 
@@ -1031,6 +1034,11 @@ class DigitalBadgesMigrator(BaseMigrator):
                         existing_paths.add(
                             credential_path
                         )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
+                        )
 
             if "credential_path" in credentials_table.c:
 
@@ -1053,6 +1061,11 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                         existing_paths.add(
                             credential_path
+                        )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
                         )
 
         return existing_paths
@@ -1120,8 +1133,34 @@ class DigitalBadgesMigrator(BaseMigrator):
     ):
 
         return (
-            f"{self.S3_BASE_URL}/badges/{source_badge_id}/pdf_badge"
+            f"{self.UPLOADS_PREFIX}/badges/{source_badge_id}/pdf_badge"
         )
+
+    def _canonical_credential_path(
+        self,
+        credential_path
+    ):
+
+        if not credential_path:
+
+            return credential_path
+
+        path = str(
+            credential_path
+        ).strip()
+
+        legacy_prefix = f"{self.LEGACY_S3_BASE_URL}/"
+
+        if path.startswith(
+            legacy_prefix
+        ):
+
+            return (
+                f"{self.UPLOADS_PREFIX}/"
+                f"{path[len(legacy_prefix):]}"
+            )
+
+        return path
 
     def _fallback_student_user_name(
         self,

@@ -23,7 +23,10 @@ class ResumeMigrator(BaseMigrator):
     CREDENTIAL_TYPE = 6
     CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED = 2
     DYNAMIC_VALUE = "DYNAMIC"
-    S3_BASE_URL = "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    LEGACY_S3_BASE_URL = (
+        "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    )
+    UPLOADS_PREFIX = "/uploads"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 10000
 
@@ -869,6 +872,11 @@ class ResumeMigrator(BaseMigrator):
                         existing_paths.add(
                             credential_path
                         )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
+                        )
 
             if "credential_path" in credentials_table.c:
 
@@ -891,6 +899,11 @@ class ResumeMigrator(BaseMigrator):
 
                         existing_paths.add(
                             credential_path
+                        )
+                        existing_paths.add(
+                            self._canonical_credential_path(
+                                credential_path
+                            )
                         )
 
         logger.info(
@@ -940,9 +953,35 @@ class ResumeMigrator(BaseMigrator):
     ):
 
         return (
-            f"{self.S3_BASE_URL}/resume/"
+            f"{self.UPLOADS_PREFIX}/resume/"
             f"{source_resume_id}/resume_data"
         )
+
+    def _canonical_credential_path(
+        self,
+        credential_path
+    ):
+
+        if not credential_path:
+
+            return credential_path
+
+        path = str(
+            credential_path
+        ).strip()
+
+        legacy_prefix = f"{self.LEGACY_S3_BASE_URL}/"
+
+        if path.startswith(
+            legacy_prefix
+        ):
+
+            return (
+                f"{self.UPLOADS_PREFIX}/"
+                f"{path[len(legacy_prefix):]}"
+            )
+
+        return path
 
     def _get_source_value(
         self,
