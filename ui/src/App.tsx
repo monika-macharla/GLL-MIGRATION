@@ -54,8 +54,8 @@ const [source, setSource] = useState<DBConfig>({
     port: 3307,
     username: 'uat-gll',
     password: 'GLLuAtS3rver@2026',
-    database: 'gllauthserviceuatmigration'
-    // database: 'gllreportsuatmigration'
+    // database: 'gllauthserviceuatmigration'
+    database: 'gllreportsuatmigration'
     // database: 'glldataingestionuatmigration' 
   });
 

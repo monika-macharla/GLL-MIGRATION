@@ -21,7 +21,10 @@ class CredentialsSharedMigrator(BaseMigrator):
     HISTORY_DESTINATION_TABLE = "student_credentials_share_history"
     LEGACY_HISTORY_DESTINATION_TABLE = "students_credentials_share_history"
     DYNAMIC_VALUE = "DYNAMIC"
-    S3_BASE_URL = "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    LEGACY_S3_BASE_URL = (
+        "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
+    )
+    UPLOADS_PREFIX = "/uploads"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 10000
     SHARE_PATHS = {
@@ -44,6 +47,14 @@ class CredentialsSharedMigrator(BaseMigrator):
         "resume_share": {
             "id_source": "credential",
             "template": "resume/{id}/resume_data",
+        },
+        "credential_shared": {
+            "id_source": "share_link",
+            "template": "credentialshare/{id}/pdf_transcript",
+        },
+        "self_uploaded_transcript_share": {
+            "id_source": "credential",
+            "template": "selfUploadedTranscript/{id}/transcript_data",
         },
         "transcript_shared": {
             "id_source": "share_link",
@@ -150,6 +161,15 @@ class CredentialsSharedMigrator(BaseMigrator):
             "target_id_column": "credential_id",
         },
         {
+            "share_table": "credential_shared",
+            "credential_table": "credential",
+            "credential_type": 2,
+            "credential_id_columns": ["credential_id"],
+            "credentials_all_link_column": "transcripts",
+            "uuid_prefix": "transcript",
+            "owner_columns": ["user_id"],
+        },
+        {
             "share_table": "self_uploaded_transcript_share",
             "credential_table": "transcript",
             "credential_type": 2,
@@ -213,10 +233,6 @@ class CredentialsSharedMigrator(BaseMigrator):
                 "credentials_shared destination table not found"
             )
 
-        history_table_name = self._resolve_history_table_name(
-            dest_table_names
-        )
-
         share_table = self._manual_reflect(
             self.SHARE_TABLE,
             self.source_engine,
@@ -231,20 +247,10 @@ class CredentialsSharedMigrator(BaseMigrator):
 
         history_table = None
 
-        if history_table_name:
-
-            history_table = self._manual_reflect(
-                history_table_name,
-                self.dest_engine,
-                self.metadata_dest
-            )
-
-        else:
-
-            logger.warning(
-                "student credentials share history destination table "
-                "not found. Skipping history insert."
-            )
+        logger.info(
+            "Skipping share history insert; this migration writes only "
+            "credentials_shared."
+        )
 
         credentials_all_table = self._manual_reflect(
             "credentials_all",
@@ -283,13 +289,6 @@ class CredentialsSharedMigrator(BaseMigrator):
             f"credentials_shared columns: "
             f"{credentials_shared_table.columns.keys()}"
         )
-        if history_table is not None:
-
-            logger.info(
-                f"{history_table.name} columns: "
-                f"{history_table.columns.keys()}"
-            )
-
         destination_user_lookup = self._build_destination_user_lookup(
             auth_users_table,
             auth_db_engine
@@ -1512,8 +1511,10 @@ class CredentialsSharedMigrator(BaseMigrator):
 
         if not path_config:
 
-            return credentials_all_row.get(
-                "credential_path"
+            return self._canonical_credential_path(
+                credentials_all_row.get(
+                    "credential_path"
+                )
             )
 
         path_id = (
@@ -1525,15 +1526,43 @@ class CredentialsSharedMigrator(BaseMigrator):
 
         if path_id is None:
 
-            return credentials_all_row.get(
-                "credential_path"
+            return self._canonical_credential_path(
+                credentials_all_row.get(
+                    "credential_path"
+                )
             )
 
         path = path_config["template"].format(
             id=path_id
         )
 
-        return f"{self.S3_BASE_URL}/{path}"
+        return f"{self.UPLOADS_PREFIX}/{path}"
+
+    def _canonical_credential_path(
+        self,
+        credential_path
+    ):
+
+        if not credential_path:
+
+            return credential_path
+
+        path = str(
+            credential_path
+        ).strip()
+
+        legacy_prefix = f"{self.LEGACY_S3_BASE_URL}/"
+
+        if path.startswith(
+            legacy_prefix
+        ):
+
+            return (
+                f"{self.UPLOADS_PREFIX}/"
+                f"{path[len(legacy_prefix):]}"
+            )
+
+        return path
 
     def _get_share_value(
         self,
