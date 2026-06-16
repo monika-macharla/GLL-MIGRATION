@@ -78,7 +78,7 @@ jhi_user                               user_hashed_password_expires_at
 
 6. hs_test_assessment                       import_student_test_assessments
 
-7. hs_student_graduation_profile           import_student_graduation_profile
+7. 0                       import_student_test_assessments
 
 8. hs_awarding_credit                      import_schools_awarding_credits
 

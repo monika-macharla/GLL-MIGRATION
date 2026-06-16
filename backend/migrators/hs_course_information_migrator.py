@@ -93,7 +93,7 @@ class HSCourseInformationMigrator(BaseMigrator):
                 remaining_limit
             )
 
-        last_source_id = 0
+        last_source_id = self._get_start_after_id()
         fetched_count = 0
         prepared_count = 0
         inserted_count = 0
@@ -402,6 +402,27 @@ class HSCourseInformationMigrator(BaseMigrator):
                 self.MAX_BATCH_SIZE
             )
         )
+
+    def _get_start_after_id(self):
+
+        configured = (
+            self.config.get("hs_course_information_start_after_id")
+            or
+            self.config.get("start_after_id")
+            or
+            0
+        )
+
+        try:
+
+            return max(
+                0,
+                int(configured)
+            )
+
+        except (TypeError, ValueError):
+
+            return 0
 
     def _stable_uuid(
         self,

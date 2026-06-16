@@ -55,8 +55,8 @@ const [source, setSource] = useState<DBConfig>({
     username: 'uat-gll',
     password: 'GLLuAtS3rver@2026',
     // database: 'gllauthserviceuatmigration'
-    database: 'gllreportsuatmigration'
-    // database: 'glldataingestionuatmigration' 
+    // database: 'gllreportsuatmigration'
+    database: 'glldataingestionuatmigration' 
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
