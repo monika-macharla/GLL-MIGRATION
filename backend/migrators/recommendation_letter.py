@@ -22,6 +22,8 @@ class RecommendationLetterMigrator(BaseMigrator):
     CREDENTIALS_TABLE = "credentials_all"
     CREDENTIAL_TYPE = 4
     CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED = 2
+    STATUS_AVAILABLE = 2
+    STATUS_REQUESTED = 3
     DYNAMIC_VALUE = "DYNAMIC"
     LEGACY_S3_BASE_URL = (
         "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
@@ -260,10 +262,15 @@ class RecommendationLetterMigrator(BaseMigrator):
                         source_request_id
                     )
                     credential_path = self._recommendation_path(
-                        source_request_id
+                        source_request_id,
+                        source_letter
                     )
 
-                    if credential_path in existing_credential_paths:
+                    if (
+                        credential_path
+                        and
+                        credential_path in existing_credential_paths
+                    ):
 
                         skipped_count += 1
                         skipped_existing += 1
@@ -417,8 +424,8 @@ class RecommendationLetterMigrator(BaseMigrator):
                         "request_status"
                     )
 
-                    status = self._map_status(
-                        request_status
+                    status = self._credential_status(
+                        credential_path
                     )
 
                     is_confidential = (
@@ -562,9 +569,11 @@ class RecommendationLetterMigrator(BaseMigrator):
                         )
                     )
 
-                    existing_credential_paths.add(
-                        credential_path
-                    )
+                    if credential_path:
+
+                        existing_credential_paths.add(
+                            credential_path
+                        )
 
                 except Exception as error:
 
@@ -1101,12 +1110,33 @@ class RecommendationLetterMigrator(BaseMigrator):
 
     def _recommendation_path(
         self,
-        source_id
+        source_request_id,
+        source_letter=None
     ):
+
+        if not source_letter:
+
+            return None
+
+        letter_id = source_letter.get(
+            "id"
+        )
+
+        if not letter_id:
+
+            return None
+
+        file_name = self._extract_file_name(
+            (
+                source_letter.get("pdf_letter_s3_link")
+                if source_letter
+                else None
+            )
+        ) or "file"
 
         return (
             f"{self.UPLOADS_PREFIX}/recommendationletter/"
-            f"{source_id}/file"
+            f"{letter_id}/{file_name}"
         )
 
     def _canonical_credential_path(
@@ -1219,6 +1249,17 @@ class RecommendationLetterMigrator(BaseMigrator):
             return 2
 
         return 1
+
+    def _credential_status(
+        self,
+        credential_path
+    ) -> int:
+
+        if credential_path:
+
+            return self.STATUS_AVAILABLE
+
+        return self.STATUS_REQUESTED
 
     def _is_truthy(
         self,
