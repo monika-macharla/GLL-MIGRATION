@@ -13,6 +13,10 @@ from migrators import (
 
     InstitutionMigrator,
 
+    InstitutionLogoMigrator,
+
+    InstitutionSealMigrator,
+
     UsersMigrator,
 
     UserRoleMigrator,
@@ -478,29 +482,83 @@ class GLLMigrationEngine:
         # INSTITUTION MIGRATION
         # -----------------------------------------
 
+        institution_logo_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "institution_logos",
+                    "institution_logo"
+                ]
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "institution_logos"
+            )
+
+            for m in mappings
+        )
+
+        institution_seal_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "institution_seals",
+                    "institution_seal"
+                ]
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "institution_seals"
+            )
+
+            for m in mappings
+        )
+
         institution_selected = any(
 
             (
-                m.get("source_table")
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
                 == "institution"
             )
 
             or
 
             (
-                m.get("destination_table")
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
                 == "institutions"
             )
 
             or
 
             (
-                m.get("destination_table")
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
                 == "institution_campuses"
             )
 
             for m in mappings
-        )
+        ) and not institution_logo_selected and not institution_seal_selected
 
         # -----------------------------------------
         # USER INSTITUTION MIGRATION
@@ -1444,6 +1502,16 @@ class GLLMigrationEngine:
         )
 
         logger.info(
+            f"institution_logo_selected="
+            f"{institution_logo_selected}"
+        )
+
+        logger.info(
+            f"institution_seal_selected="
+            f"{institution_seal_selected}"
+        )
+
+        logger.info(
             f"user_institution_selected="
             f"{user_institution_selected}"
         )
@@ -1787,6 +1855,58 @@ class GLLMigrationEngine:
             migrators.append(
 
                 InstitutionMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add InstitutionLogoMigrator
+        # -----------------------------------------
+
+        if institution_logo_selected:
+
+            logger.info(
+                "Adding InstitutionLogoMigrator"
+            )
+
+            migrators.append(
+
+                InstitutionLogoMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add InstitutionSealMigrator
+        # -----------------------------------------
+
+        if institution_seal_selected:
+
+            logger.info(
+                "Adding InstitutionSealMigrator"
+            )
+
+            migrators.append(
+
+                InstitutionSealMigrator(
 
                     self,
 

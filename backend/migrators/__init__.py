@@ -1,5 +1,6 @@
 
 from .institution_migrator import InstitutionMigrator
+from .institution_logo_migrator import InstitutionLogoMigrator, InstitutionSealMigrator
 from .base_migrator import BaseMigrator
 from .users_migrator import UsersMigrator
 from .user_role_migrator import UserRoleMigrator
@@ -43,4 +44,4 @@ from .scholarship_activity_migrator import ScholarshipActivityMigrator
 from .institution_sftp_credentials_migrator import InstitutionSftpCredentialsMigrator
 
 
-__all__ = ['BaseMigrator', 'InstitutionMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','PasswordExpirationMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator','HSClassRankGPAMigrator','HSCourseInformationMigrator','TranscriptExtMigrator','HSTestAssessmentMigrator','HSStudentGraduationProfileMigrator','HSAwardingCreditMigrator','HSCreditSummaryMigrator','CCDegreeAwardedMigrator','CCCoursesMigrator','CCTermMigrator','CovidVaccineMigrator','HoldsMigrator','UserCampusMigrator','EmploymentMigrator','ScholarshipActivityMigrator','InstitutionSftpCredentialsMigrator']
+__all__ = ['BaseMigrator', 'InstitutionMigrator','InstitutionLogoMigrator','InstitutionSealMigrator','UsersMigrator','UserRoleMigrator','UserProfileMigrator','ParentStudentMigrator','PasswordMigrator','PasswordExpirationMigrator','UserInstitutionMigrator','UserEnrollmentMigrator','GLStudentMigrator','DigitalBadgesMigrator','ResumeMigrator','RecommendationLetterMigrator','SelfUploadMigrator','TranscriptMigrator','CertificateMigrator','CredentialsSharedMigrator','RegistrarsMigrator','PreferencesMigrator','FerpaMigrator','NsapiPreferencesMigrator','CredentialVisibilityMigrator','ImportStudentsMigrator','ImportParentsMigrator','HSOtherCredsMigrator','HSClassRankGPAMigrator','HSCourseInformationMigrator','TranscriptExtMigrator','HSTestAssessmentMigrator','HSStudentGraduationProfileMigrator','HSAwardingCreditMigrator','HSCreditSummaryMigrator','CCDegreeAwardedMigrator','CCCoursesMigrator','CCTermMigrator','CovidVaccineMigrator','HoldsMigrator','UserCampusMigrator','EmploymentMigrator','ScholarshipActivityMigrator','InstitutionSftpCredentialsMigrator']
