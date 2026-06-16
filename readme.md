@@ -72,34 +72,33 @@ jhi_user                               user_hashed_password_expires_at
 2. gl_parent                                import_parents
 3. hs_other_creds                           import_apibs
 
+4. hs_class_rank_gpa                        import_class_rank_gpa
+
 5. hs_course_information                    import_course_information
 
-4. hs_class_rank_gpa                        import_class_rank_gpa
-6. transcript_ext                           import_edi_transcript_ext(fixes)
+6. hs_test_assessment                       import_student_test_assessments
 
-7. hs_test_assessment                       import_student_test_assessments
+7. hs_student_graduation_profile           import_student_graduation_profile
 
-8. hs_student_graduation_profile           import_student_graduation_profile
+8. hs_awarding_credit                      import_schools_awarding_credits
 
-9. hs_awarding_credit                      import_schools_awarding_credits
+9.hs_transcript                           import_credit_summary
 
-10.hs_transcript                           import_credit_summary
+10. covid_vaccine_meta_data                vaccination_certificate_data
 
-11. cc_degree_awarded                      import_edi_award
+11. inst_holds_ext                         holds
 
-12. cc_courses / cc_course                 import_edi_courses / import_edi_course
+12. transcript_ext                           import_edi_transcript_ext(fixes)
 
-13. covid_vaccine_meta_data                vaccination_certificate_data
+13. cc_degree_awarded                      import_edi_award
 
-14. inst_holds_ext                         holds
+14. cc_courses / cc_course                 import_edi_courses / import_edi_course
 
-15. cc_degree_award                        import_edi_award
+15. cc_courses                             import_edi_courses
 
-16. cc_courses                             import_edi_courses
+16. cc_term                                import_edi_semester
 
-17. cc_term                                import_edi_semester
-
-18.
+17.
 
 Blockchain Mapping CSV Import
 ------------------------------------------------------------
