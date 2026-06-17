@@ -95,7 +95,9 @@ from migrators import (
 
     ScholarshipActivityMigrator,
 
-    InstitutionSftpCredentialsMigrator
+    InstitutionSftpCredentialsMigrator,
+
+    CounsellorStudentViewMigrator
 
 )
 
@@ -1375,6 +1377,36 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # COUNSELLOR STUDENT VIEW MIGRATION
+        # -----------------------------------------
+
+        counsellor_student_view_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "gl_student"
+                and
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "counsellor_student_view"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "counsellor_student_view"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # EMPLOYMENT MIGRATION
         # -----------------------------------------
 
@@ -1664,6 +1696,11 @@ class GLLMigrationEngine:
         logger.info(
             f"user_campus_selected="
             f"{user_campus_selected}"
+        )
+
+        logger.info(
+            f"counsellor_student_view_selected="
+            f"{counsellor_student_view_selected}"
         )
 
         logger.info(
@@ -2713,6 +2750,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 UserCampusMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CounsellorStudentViewMigrator
+        # -----------------------------------------
+
+        if counsellor_student_view_selected:
+
+            logger.info(
+                "Adding CounsellorStudentViewMigrator"
+            )
+
+            migrators.append(
+
+                CounsellorStudentViewMigrator(
 
                     self,
 

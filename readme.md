@@ -40,6 +40,9 @@ jhi_user                               user_hashed_password_expires_at
 
 17. esc_sftp_user                    institution_sftp_credentials
 
+18. counsellor_student_view cd backend
+python3 -c "import logging; from gll_migration_engine import GLLMigrationEngine; logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'); config={'source_db': {'type':'mysql','host':'192.168.2.195','port':3306,'username':'gllmigration','password':'G1lmI7rAtI0n@2026','database':'gll'}, 'destination_db': {'type':'mysql','host':'16.58.172.0','port':3307,'username':'uat-gll','password':'GLLuAtS3rver@2026','database
+
 ==========================================================================================================================
 2. gllreports
 
