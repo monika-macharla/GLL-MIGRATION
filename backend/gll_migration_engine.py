@@ -97,7 +97,9 @@ from migrators import (
 
     InstitutionSftpCredentialsMigrator,
 
-    CounsellorStudentViewMigrator
+    CounsellorStudentViewMigrator,
+
+    InstitutionUuidFixMigrator
 
 )
 
@@ -1500,6 +1502,37 @@ class GLLMigrationEngine:
         )
 
         # -----------------------------------------
+        # INSTITUTION UUID FIX MIGRATION
+        # -----------------------------------------
+
+        institution_uuid_fix_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in [
+                    "institution_uuid_fix",
+                    "institution_uuid_repair"
+                ]
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in [
+                    "institution_uuid_fix",
+                    "institution_uuid_repair"
+                ]
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
         # Logs
         # -----------------------------------------
 
@@ -1716,6 +1749,11 @@ class GLLMigrationEngine:
         logger.info(
             f"institution_sftp_credentials_selected="
             f"{institution_sftp_credentials_selected}"
+        )
+
+        logger.info(
+            f"institution_uuid_fix_selected="
+            f"{institution_uuid_fix_selected}"
         )
 
         logger.info(
@@ -2854,6 +2892,32 @@ class GLLMigrationEngine:
             migrators.append(
 
                 InstitutionSftpCredentialsMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add InstitutionUuidFixMigrator
+        # -----------------------------------------
+
+        if institution_uuid_fix_selected:
+
+            logger.info(
+                "Adding InstitutionUuidFixMigrator"
+            )
+
+            migrators.append(
+
+                InstitutionUuidFixMigrator(
 
                     self,
 
