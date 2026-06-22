@@ -41,22 +41,22 @@ interface TestResults {
 function App() {
 const [source, setSource] = useState<DBConfig>({
   db_type: 'mysql',
-  host: '192.168.2.195',
+  host: 'gll-prod.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
   port: 3306,
-  username: 'gllmigration',
-  password: 'G1lmI7rAtI0n@2026',
-  database: 'gll'
+  username: 'gll_user',
+  password: 'StrongPaSSW0rdGLL@2026',
+  database: 'gll_prod'
 });
 
   const [dest, setDest] = useState<DBConfig>({
     db_type: 'mysql',
-    host: '16.58.172.0',
-    port: 3307,
-    username: 'uat-gll',
-    password: 'GLLuAtS3rver@2026',
-    // database: 'gllauthserviceuatmigration'
+    host: 'gll-prod.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
+    port: 3306,
+    username: 'gll_user',
+    password: 'StrongPaSSW0rdGLL@2026',
+    database: 'gllauthservice',
     // database: 'gllreportsuatmigration'
-    database: 'glldataingestionuatmigration' 
+    // database: 'glldataingestion' 
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
@@ -67,7 +67,7 @@ const [source, setSource] = useState<DBConfig>({
     port: 3307,
     username: 'uat-gll',
     password: 'GLLuAtS3rver@2026',
-    database: 'gllauthserviceuatmigration'
+    database: 'gllauthservice'
   }
 ]);
 
