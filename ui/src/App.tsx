@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react';
 import { Database, Play, CheckCircle2, XCircle, Loader2, Plus, Trash2, Settings2, Clock, RotateCcw } from 'lucide-react';
 
 interface DBConfig {
@@ -38,6 +38,8 @@ interface TestResults {
   lookup: Record<number, string>;
 }
 
+const API_BASE_URL = window.location.protocol + '//' + window.location.hostname + ':8000';
+
 function App() {
 const [source, setSource] = useState<DBConfig>({
   db_type: 'mysql',
@@ -54,19 +56,19 @@ const [source, setSource] = useState<DBConfig>({
     port: 3306,
     username: 'gll_user',
     password: 'StrongPaSSW0rdGLL@2026',
-    database: 'gllauthservice',
-    // database: 'gllreportsuatmigration'
-    // database: 'glldataingestion' 
+    // database: 'gllauthservice',
+    // database: 'gllreports'
+    database: 'glldataingestion'
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
   {
     name: 'auth_db',
     db_type: 'mysql',
-    host: '16.58.172.0',
-    port: 3307,
-    username: 'uat-gll',
-    password: 'GLLuAtS3rver@2026',
+    host: 'gll-prod.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
+    port: 3306,
+    username: 'gll_user',
+    password: 'StrongPaSSW0rdGLL@2026',
     database: 'gllauthservice'
   }
 ]);
@@ -88,24 +90,24 @@ const [source, setSource] = useState<DBConfig>({
 });
   const [limit, setLimit] = useState<number | undefined>(undefined);
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
-
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8000/history');
+      const response = await fetch(API_BASE_URL + '/history');
       const data = await response.json();
       setHistory(data);
     } catch (err) {
       console.error("Failed to fetch history", err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(fetchHistory);
+  }, [fetchHistory]);
 
   const fetchSchema = async (type: 'source' | 'dest') => {
     const config = type === 'source' ? source : dest;
     try {
-      const response = await fetch('http://localhost:8000/schema', {
+      const response = await fetch(API_BASE_URL + '/schema', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -124,7 +126,7 @@ const [source, setSource] = useState<DBConfig>({
     const config = type === 'source' ? source : dest;
     setTestResults(prev => ({ ...prev, [type]: 'Testing...' }));
     try {
-      const response = await fetch('http://localhost:8000/test-connection', {
+      const response = await fetch(API_BASE_URL + '/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config)
@@ -135,7 +137,7 @@ const [source, setSource] = useState<DBConfig>({
       if (success) {
         fetchSchema(type);
       }
-    } catch (err) {
+    } catch {
       setTestResults(prev => ({ ...prev, [type]: 'Error' }));
     }
   };
@@ -145,7 +147,7 @@ const [source, setSource] = useState<DBConfig>({
   index: number
 ) => {
 
-  setTestResults((prev: any) => ({
+  setTestResults((prev) => ({
     ...prev,
     lookup: {
       ...prev.lookup,
@@ -156,7 +158,7 @@ const [source, setSource] = useState<DBConfig>({
   try {
 
     const response = await fetch(
-      'http://localhost:8000/test-connection',
+      API_BASE_URL + '/test-connection',
       {
         method: 'POST',
         headers: {
@@ -171,7 +173,7 @@ const [source, setSource] = useState<DBConfig>({
     const success =
       data.status === 'success';
 
-    setTestResults((prev: any) => ({
+    setTestResults((prev) => ({
       ...prev,
       lookup: {
         ...prev.lookup,
@@ -183,7 +185,7 @@ const [source, setSource] = useState<DBConfig>({
 
   } catch {
 
-    setTestResults((prev: any) => ({
+    setTestResults((prev) => ({
       ...prev,
       lookup: {
         ...prev.lookup,
@@ -201,7 +203,7 @@ const [source, setSource] = useState<DBConfig>({
 
     setStatus({ type: 'loading', message: 'Starting migration...' });
     try {
-      const response = await fetch('http://localhost:8000/migrate', {
+      const response = await fetch(API_BASE_URL + '/migrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -220,7 +222,7 @@ const [source, setSource] = useState<DBConfig>({
         setStatus({ type: 'error', message: data.detail || 'Migration failed' });
         fetchHistory();
       }
-    } catch (err) {
+    } catch {
       setStatus({ type: 'error', message: 'Connection to backend failed' });
     }
   };
@@ -229,39 +231,69 @@ const [source, setSource] = useState<DBConfig>({
     setMappings([...mappings, { source_table: '', destination_table: '', columns: {} }]);
   };
 
-  const updateMapping = (index: number, field: keyof TableMapping, value: any) => {
-    const newMappings = [...mappings];
-    newMappings[index] = { ...newMappings[index], [field]: value };
-    // Auto-fill destination table if same name and user wants to create if not exists
-    if (field === 'source_table') {
-      if (value === 'institution' || value === 'address') {
-        newMappings[index].destination_table = 'institutions';
-      } else if (value === 'cc_degree_awarded' || value === 'cc_degree_awaeded') {
-        newMappings[index].destination_table = 'import_edi_award';
-      } else if (value === 'cc_courses' || value === 'cc_course') {
-        newMappings[index].destination_table = 'import_edi_courses';
-      } else if (value === 'cc_term') {
-        newMappings[index].destination_table = 'import_edi_semester';
-      } else if (value === 'cc_external_articulated_registration') {
-        newMappings[index].destination_table = 'import_edi_external_articulated_registration';
-      } else if (value === 'cc_transfer_credit_summary') {
-        newMappings[index].destination_table = 'import_edi_institutions_attended';
-      } else if (value === 'cc_transctript_ext') {
-        newMappings[index].destination_table = 'import_edi_gpa';
-      } else if (value === 'cc_transcript_ext' || value === 'cc_transcript_extended_info') {
-        newMappings[index].destination_table = 'import_edi_transcript_ext';
-      } else if (!newMappings[index].destination_table) {
-        newMappings[index].destination_table = value;
+  const updateMapping = <K extends keyof TableMapping>(
+    index: number,
+    field: K,
+    value: TableMapping[K]
+  ) => {
+    setMappings(prevMappings => prevMappings.map((mapping, mappingIndex) => {
+      if (mappingIndex !== index) {
+        return mapping;
       }
-    }
-    setMappings(newMappings);
+
+      const updatedMapping = { ...mapping, [field]: value };
+
+      if (field !== 'source_table') {
+        return updatedMapping;
+      }
+
+      const sourceTable = value as TableMapping['source_table'];
+
+      if (sourceTable === 'institution' || sourceTable === 'address') {
+        return { ...updatedMapping, destination_table: 'institutions' };
+      }
+
+      if (sourceTable === 'cc_degree_awarded' || sourceTable === 'cc_degree_awaeded') {
+        return { ...updatedMapping, destination_table: 'import_edi_award' };
+      }
+
+      if (sourceTable === 'cc_courses' || sourceTable === 'cc_course') {
+        return { ...updatedMapping, destination_table: 'import_edi_courses' };
+      }
+
+      if (sourceTable === 'cc_term') {
+        return { ...updatedMapping, destination_table: 'import_edi_semester' };
+      }
+
+      if (sourceTable === 'cc_external_articulated_registration') {
+        return { ...updatedMapping, destination_table: 'import_edi_external_articulated_registration' };
+      }
+
+      if (sourceTable === 'cc_transfer_credit_summary') {
+        return { ...updatedMapping, destination_table: 'import_edi_institutions_attended' };
+      }
+
+      if (sourceTable === 'cc_transctript_ext') {
+        return { ...updatedMapping, destination_table: 'import_edi_gpa' };
+      }
+
+      if (sourceTable === 'cc_transcript_ext' || sourceTable === 'cc_transcript_extended_info') {
+        return { ...updatedMapping, destination_table: 'import_edi_transcript_ext' };
+      }
+
+      if (!mapping.destination_table) {
+        return { ...updatedMapping, destination_table: sourceTable };
+      }
+
+      return updatedMapping;
+    }));
   };
 
   const removeTableMapping = (index: number) => {
     setMappings(mappings.filter((_, i) => i !== index));
   };
 
-  const renderConfigForm = (title: string, config: DBConfig, setConfig: React.Dispatch<React.SetStateAction<DBConfig>>, type: 'source' | 'dest') => (
+  const renderConfigForm = (title: string, config: DBConfig, setConfig: Dispatch<SetStateAction<DBConfig>>, type: 'source' | 'dest') => (
     <div className="card">
       <h2 className="card-title">
         <Database size={20} color="#a855f7" />
@@ -310,7 +342,7 @@ const [source, setSource] = useState<DBConfig>({
   return (
     <div className="app-container">
       <header>
-        <h1>Antigravity Migrate</h1>
+        <div className="app-title">Antigravity Migrate</div>
         <p>GLL Project Data Migration Control Center</p>
       </header>
 
@@ -324,10 +356,10 @@ const [source, setSource] = useState<DBConfig>({
   style={{ marginTop: '2rem' }}
 >
 
-  <h2 className="card-title">
+  <div className="card-title">
     <Database size={20} color="#22c55e" />
     Lookup Databases
-  </h2>
+  </div>
 
   {lookupDatabases.map((lookup, index) => (
 
@@ -517,10 +549,10 @@ const [source, setSource] = useState<DBConfig>({
       <div className="grid" style={{ gridTemplateColumns: '250px 1fr', gap: '2rem', alignItems: 'start' }}>
         {/* Sidebar for Source Tables */}
         <div className="card" style={{ position: 'sticky', top: '2rem', minHeight: '400px' }}>
-          <h2 className="card-title" style={{ fontSize: '1rem' }}>
+          <div className="card-title" style={{ fontSize: '1rem' }}>
             <Database size={16} color="#a855f7" />
             Source Tables
-          </h2>
+          </div>
           {Object.keys(sourceSchema).length === 0 ? (
             <p style={{ fontSize: '0.8rem', color: 'hsl(var(--muted-foreground))' }}>
               Connect to source database to view tables.
@@ -550,10 +582,10 @@ const [source, setSource] = useState<DBConfig>({
         <div>
           <div className="card" style={{ marginBottom: '2rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 className="card-title" style={{ margin: 0 }}>
+              <div className="card-title" style={{ margin: 0 }}>
                 <Settings2 size={20} color="#a855f7" />
                 Mapping Configuration
-              </h2>
+              </div>
               <button className="btn btn-secondary" onClick={addMapping} disabled={!testResults.source || !testResults.dest}>
                 <Plus size={18} />
                 Add Custom Mapping
@@ -708,10 +740,10 @@ const [source, setSource] = useState<DBConfig>({
 
       <div className="card" style={{ marginTop: '3rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2 className="card-title" style={{ margin: 0 }}>
+          <div className="card-title" style={{ margin: 0 }}>
             <Clock size={20} color="#a855f7" />
             Migration History
-          </h2>
+          </div>
           <button className="btn btn-secondary" onClick={fetchHistory}>
             <RotateCcw size={16} />
             Refresh
