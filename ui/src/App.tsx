@@ -242,6 +242,14 @@ const [source, setSource] = useState<DBConfig>({
         newMappings[index].destination_table = 'import_edi_courses';
       } else if (value === 'cc_term') {
         newMappings[index].destination_table = 'import_edi_semester';
+      } else if (value === 'cc_external_articulated_registration') {
+        newMappings[index].destination_table = 'import_edi_external_articulated_registration';
+      } else if (value === 'cc_transfer_credit_summary') {
+        newMappings[index].destination_table = 'import_edi_institutions_attended';
+      } else if (value === 'cc_transctript_ext') {
+        newMappings[index].destination_table = 'import_edi_gpa';
+      } else if (value === 'cc_transcript_ext' || value === 'cc_transcript_extended_info') {
+        newMappings[index].destination_table = 'import_edi_transcript_ext';
       } else if (!newMappings[index].destination_table) {
         newMappings[index].destination_table = value;
       }
@@ -606,6 +614,10 @@ const [source, setSource] = useState<DBConfig>({
                                 <option value="institutions">institutions (Main)</option>
                                 <option value="institution_campuses">institution_campuses</option>
                                 <option value="user_hashed_password_expires_at">password expires_at fix</option>
+                                <option value="import_edi_external_articulated_registration">import_edi_external_articulated_registration</option>
+                                <option value="import_edi_institutions_attended">import_edi_institutions_attended</option>
+                                <option value="import_edi_gpa">import_edi_gpa</option>
+                                <option value="import_edi_transcript_ext">import_edi_transcript_ext</option>
                               </optgroup>
                               <optgroup label="Detected Tables">
                                 {Object.keys(destSchema).map(t => <option key={t} value={t}>{t}</option>)}

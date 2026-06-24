@@ -97,11 +97,15 @@ python3 -c "import logging; from gll_migration_engine import GLLMigrationEngine;
 
 14. cc_courses / cc_course                 import_edi_courses / import_edi_course
 
-15. cc_courses                             import_edi_courses
+15. cc_term                                import_edi_semester
 
-16. cc_term                                import_edi_semester
+16.cc_transctript_ext                       import_edi_gpa
 
-17.
+17.cc_transcript_ext                        import_edi_transcript_ext
+
+18.cc_transfer_credit_summary               import_edi_inst_attended
+
+19.cc_external_articulated_registration         import_edi_external_articulated_registration
 
 Blockchain Mapping CSV Import
 ------------------------------------------------------------

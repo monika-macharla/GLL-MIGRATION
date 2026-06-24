@@ -339,6 +339,8 @@ async def migrate(request: MigrationRequest):
 
                 "import_edi_transcript_ext",
 
+                "import_edi_gpa",
+
                 "import_student_test_assessments",
 
                 "import_student_graduation_profile",
@@ -355,7 +357,11 @@ async def migrate(request: MigrationRequest):
 
                 "import_edi_semester",
 
-                "import_edi_semesters",
+                "import_edi_external_articulated_registration",
+
+                "import_edi_institutions_attended",
+
+                "import_edi_inst_attended",
 
                 "vaccination_certificate_data",
 
@@ -468,6 +474,14 @@ async def migrate(request: MigrationRequest):
                 "cc_course",
 
                 "cc_term",
+
+                "cc_external_articulated_registration",
+
+                "cc_transfer_credit_summary",
+
+                "cc_transcript_extended_info",
+
+                "cc_transcript_ext",
 
                 "covid_vaccine_meta_data",
 

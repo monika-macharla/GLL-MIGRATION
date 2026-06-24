@@ -85,6 +85,14 @@ from migrators import (
 
     CCTermMigrator,
 
+    CCExternalArticulatedRegistrationMigrator,
+
+    CCTransferCreditSummaryMigrator,
+
+    CCTranscriptExtGpaMigrator,
+
+    CCTranscriptExtMigrator,
+
     CovidVaccineMigrator,
 
     HoldsMigrator,
@@ -1106,6 +1114,11 @@ class GLLMigrationEngine:
                     m.get("destination_table") or ""
                 ).strip().lower()
                 == "import_edi_transcript_ext"
+                and
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                not in ("cc_transcript_extended_info", "cc_transcript_ext", "cc_transctript_ext")
             )
 
             for m in mappings
@@ -1293,6 +1306,105 @@ class GLLMigrationEngine:
                     "import_edi_semester",
                     "import_edi_semesters",
                 )
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # CC EXTERNAL ARTICULATED REGISTRATION IMPORT MIGRATION
+        # -----------------------------------------
+
+        cc_external_articulated_registration_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "cc_external_articulated_registration"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_edi_external_articulated_registration"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # CC TRANSFER CREDIT SUMMARY (INSTITUTIONS ATTENDED) IMPORT MIGRATION
+        # -----------------------------------------
+
+        cc_transfer_credit_summary_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                == "cc_transfer_credit_summary"
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                in (
+                    "import_edi_institutions_attended",
+                    "import_edi_inst_attended",
+                )
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # CC TRANSCRIPT EXT GPA MIGRATION
+        # -----------------------------------------
+
+        cc_transcript_ext_gpa_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in ("cc_transcript_extended_info", "cc_transcript_ext", "cc_transctript_ext")
+            )
+
+            or
+
+            (
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_edi_gpa"
+            )
+
+            for m in mappings
+        )
+
+        # -----------------------------------------
+        # CC TRANSCRIPT EXT MIGRATION
+        # -----------------------------------------
+
+        cc_transcript_ext_selected = any(
+
+            (
+                str(
+                    m.get("source_table") or ""
+                ).strip().lower()
+                in ("cc_transcript_extended_info", "cc_transcript_ext", "cc_transctript_ext")
+                and
+                str(
+                    m.get("destination_table") or ""
+                ).strip().lower()
+                == "import_edi_transcript_ext"
             )
 
             for m in mappings
@@ -1714,6 +1826,26 @@ class GLLMigrationEngine:
         logger.info(
             f"cc_term_selected="
             f"{cc_term_selected}"
+        )
+
+        logger.info(
+            f"cc_external_articulated_registration_selected="
+            f"{cc_external_articulated_registration_selected}"
+        )
+
+        logger.info(
+            f"cc_transfer_credit_summary_selected="
+            f"{cc_transfer_credit_summary_selected}"
+        )
+
+        logger.info(
+            f"cc_transcript_ext_gpa_selected="
+            f"{cc_transcript_ext_gpa_selected}"
+        )
+
+        logger.info(
+            f"cc_transcript_ext_selected="
+            f"{cc_transcript_ext_selected}"
         )
 
         logger.info(
@@ -2710,6 +2842,110 @@ class GLLMigrationEngine:
             migrators.append(
 
                 CCTermMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CCExternalArticulatedRegistrationMigrator
+        # -----------------------------------------
+
+        if cc_external_articulated_registration_selected:
+
+            logger.info(
+                "Adding CCExternalArticulatedRegistrationMigrator"
+            )
+
+            migrators.append(
+
+                CCExternalArticulatedRegistrationMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CCTransferCreditSummaryMigrator
+        # -----------------------------------------
+
+        if cc_transfer_credit_summary_selected:
+
+            logger.info(
+                "Adding CCTransferCreditSummaryMigrator"
+            )
+
+            migrators.append(
+
+                CCTransferCreditSummaryMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CCTranscriptExtGpaMigrator
+        # -----------------------------------------
+
+        if cc_transcript_ext_gpa_selected:
+
+            logger.info(
+                "Adding CCTranscriptExtGpaMigrator"
+            )
+
+            migrators.append(
+
+                CCTranscriptExtGpaMigrator(
+
+                    self,
+
+                    self.source_engine,
+
+                    self.dest_engine,
+
+                    self.storage,
+
+                    self.config
+                )
+            )
+
+        # -----------------------------------------
+        # Add CCTranscriptExtMigrator
+        # -----------------------------------------
+
+        if cc_transcript_ext_selected:
+
+            logger.info(
+                "Adding CCTranscriptExtMigrator"
+            )
+
+            migrators.append(
+
+                CCTranscriptExtMigrator(
 
                     self,
 
