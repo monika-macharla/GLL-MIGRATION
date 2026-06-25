@@ -1,9 +1,11 @@
 import logging
+import re
 import uuid
 
+from collections import defaultdict
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from .base_migrator import BaseMigrator
@@ -17,6 +19,8 @@ class CovidVaccineMigrator(BaseMigrator):
     DESTINATION_TABLE = "vaccination_certificate_data"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 20000
+    DEFAULT_AUTH_DATABASE = "gllauthserviceuatmigration"
+    IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
     def __init__(
         self,
@@ -91,6 +95,11 @@ class CovidVaccineMigrator(BaseMigrator):
 
         batch_size = self._get_batch_size()
         remaining_limit = self.config.get("limit")
+        institution_uuid_lookup = (
+            self._build_institution_uuid_lookup(
+                institution_table
+            )
+        )
 
         if remaining_limit is not None:
 
@@ -304,6 +313,10 @@ class CovidVaccineMigrator(BaseMigrator):
                         255
                     ),
                     "institution_uuid": (
+                        institution_uuid_lookup.get(
+                            source_institution_id
+                        )
+                        or
                         self._institution_uuid(
                             source_institution_id
                         )
@@ -373,6 +386,194 @@ class CovidVaccineMigrator(BaseMigrator):
         )
 
         return inserted_count
+
+    def _build_institution_uuid_lookup(
+        self,
+        institution_table
+    ):
+
+        with self.source_engine.connect() as source_conn:
+
+            source_rows = source_conn.execute(
+                select(
+                    institution_table.c.id,
+                    institution_table.c.name
+                )
+                .where(
+                    institution_table.c.name.isnot(None)
+                )
+            ).fetchall()
+
+        auth_rows = self._load_auth_institution_rows()
+
+        if not auth_rows:
+
+            logger.warning(
+                "No auth institution rows loaded; falling back to "
+                "generated institution UUIDs."
+            )
+
+            return {}
+
+        auth_by_name = defaultdict(list)
+
+        for row in auth_rows:
+
+            institution_name = self._normalize(
+                row.get("name")
+            )
+            institution_uuid = row.get(
+                "uuid"
+            )
+
+            if institution_name and institution_uuid:
+
+                auth_by_name[
+                    institution_name
+                ].append(
+                    institution_uuid
+                )
+
+        lookup = {}
+        ambiguous = 0
+        missing = 0
+
+        for row in source_rows:
+
+            row_dict = row._mapping
+            source_institution_id = row_dict.get(
+                institution_table.c.id
+            )
+            institution_name = self._normalize(
+                row_dict.get(
+                    institution_table.c.name
+                )
+            )
+
+            if not source_institution_id or not institution_name:
+
+                continue
+
+            matches = auth_by_name.get(
+                institution_name,
+                []
+            )
+
+            if len(matches) == 1:
+
+                lookup[
+                    source_institution_id
+                ] = str(matches[0])
+
+            elif len(matches) > 1:
+
+                ambiguous += 1
+
+            else:
+
+                missing += 1
+
+        logger.info(
+            "Loaded covid vaccine institution UUID lookup: "
+            f"mapped={len(lookup)}, "
+            f"ambiguous={ambiguous}, "
+            f"missing={missing}"
+        )
+
+        return lookup
+
+    def _load_auth_institution_rows(
+        self
+    ):
+
+        auth_db_engine = self.get_lookup_engine(
+            "auth_db"
+        )
+
+        if auth_db_engine:
+
+            institutions_table = self._manual_reflect(
+                "institutions",
+                auth_db_engine,
+                self.metadata_dest
+            )
+
+            with auth_db_engine.connect() as auth_conn:
+
+                rows = auth_conn.execute(
+                    select(
+                        institutions_table.c.uuid,
+                        institutions_table.c.name
+                    )
+                    .where(
+                        institutions_table.c.deleted_at.is_(None)
+                    )
+                    .where(
+                        institutions_table.c.name.isnot(None)
+                    )
+                ).fetchall()
+
+            return [
+                dict(row._mapping)
+                for row in rows
+            ]
+
+        auth_database = self._auth_database()
+
+        logger.info(
+            "auth_db lookup engine not configured; loading "
+            f"institutions from schema {auth_database}."
+        )
+
+        try:
+
+            with self.dest_engine.connect() as auth_conn:
+
+                return auth_conn.execute(
+                    text(
+                        f"""
+                        SELECT uuid, name
+                        FROM `{auth_database}`.`institutions`
+                        WHERE deleted_at IS NULL
+                          AND name IS NOT NULL
+                          AND TRIM(name) <> ''
+                        """
+                    )
+                ).mappings().all()
+
+        except Exception as exc:
+
+            logger.warning(
+                "Failed loading auth institutions from schema "
+                f"{auth_database}: {exc}"
+            )
+
+            return []
+
+    def _auth_database(
+        self
+    ):
+
+        settings = self.config.get(
+            "institution_uuid_fix",
+            {}
+        )
+        auth_database = settings.get(
+            "auth_database"
+        ) or self.config.get(
+            "auth_database"
+        ) or self.DEFAULT_AUTH_DATABASE
+
+        if not self.IDENTIFIER_PATTERN.match(
+            str(auth_database)
+        ):
+
+            raise ValueError(
+                f"Invalid auth database identifier: {auth_database}"
+            )
+
+        return auth_database
+
 
     def _load_students_by_user_id(
         self,
@@ -730,6 +931,23 @@ class CovidVaccineMigrator(BaseMigrator):
                 uuid.NAMESPACE_URL,
                 f"gll:institution:{source_institution_id}"
             )
+        )
+
+    def _normalize(
+        self,
+        value
+    ):
+
+        value = self._clean_string(
+            value
+        )
+
+        if not value:
+
+            return None
+
+        return " ".join(
+            value.lower().split()
         )
 
     def _clean_string(

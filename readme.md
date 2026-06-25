@@ -40,8 +40,6 @@ jhi_user                               user_hashed_password_expires_at
 
 17. esc_sftp_user                    institution_sftp_credentials
 
-18. counsellor_student_view cd backend
-python3 -c "import logging; from gll_migration_engine import GLLMigrationEngine; logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s'); config={'source_db': {'type':'mysql','host':'192.168.2.195','port':3306,'username':'gllmigration','password':'G1lmI7rAtI0n@2026','database':'gll'}, 'destination_db': {'type':'mysql','host':'16.58.172.0','port':3307,'username':'uat-gll','password':'GLLuAtS3rver@2026','database
 
 ==========================================================================================================================
 2. gllreports
@@ -91,21 +89,29 @@ python3 -c "import logging; from gll_migration_engine import GLLMigrationEngine;
 
 11. inst_holds_ext                         holds
 
-12. transcript_ext                           import_edi_transcript_ext(fixes)
+18. gl_student                             counsellor_student_view 
 
-13. cc_degree_awarded                      import_edi_award
 
-14. cc_courses / cc_course                 import_edi_courses / import_edi_course
 
-15. cc_term                                import_edi_semester
+12. transcript_ext                             import_edi_transcript_ext(fixes)
 
-16.cc_transctript_ext                       import_edi_gpa
+13. cc_degree_awarded                          import_edi_award
 
-17.cc_transcript_ext                        import_edi_transcript_ext
+14. cc_courses / cc_course                     import_edi_courses / import_edi_course
 
-18.cc_transfer_credit_summary               import_edi_inst_attended
+15. cc_term                                    import_edi_semester
 
-19.cc_external_articulated_registration         import_edi_external_articulated_registration
+16	cc_transcript_ext /
+ cc_transcript_extended_info	              import_edi_gpa
+
+17	cc_transcript_ext / 
+cc_transcript_extended_info	                  import_edi_transcript_ext
+
+
+18	cc_transfer_credit_summary	             import_edi_institutions_attended
+
+19	cc_external_articulated_registration    import_edi_external_articulated_registration
+	                 
 
 Blockchain Mapping CSV Import
 ------------------------------------------------------------

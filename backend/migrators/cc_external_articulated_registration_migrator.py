@@ -1,9 +1,10 @@
 import logging
+import re
 import uuid
 
 from datetime import datetime
 
-from sqlalchemy import func, inspect, select
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 
 from .base_migrator import BaseMigrator
@@ -15,6 +16,8 @@ class CCExternalArticulatedRegistrationMigrator(BaseMigrator):
 
     SOURCE_TABLE = "cc_external_articulated_registration"
     DESTINATION_TABLE = "import_edi_external_articulated_registration"
+    DEFAULT_AUTH_DATABASE = "gllauthserviceuatmigration"
+    IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
     DEFAULT_BATCH_SIZE = 5000
     MAX_BATCH_SIZE = 10000
 
@@ -406,60 +409,132 @@ class CCExternalArticulatedRegistrationMigrator(BaseMigrator):
 
     def _load_destination_institution_lookup(self):
 
-        auth_db_engine = self.get_lookup_engine(
-            "auth_db"
-        )
+        auth_rows = self._load_auth_institution_rows()
 
-        if not auth_db_engine:
+        if not auth_rows:
 
             logger.warning(
-                "auth_db lookup engine not configured; "
-                "falling back to generated institution UUIDs."
+                "No auth institution rows loaded; falling back to "
+                "generated institution UUIDs."
             )
 
             return {}
 
-        institutions_table = self._manual_reflect(
-            "institutions",
-            auth_db_engine,
-            self.metadata_dest
-        )
-
         lookup = {}
 
-        with auth_db_engine.connect() as conn:
+        for row in auth_rows:
 
-            rows = conn.execute(
-                select(
-                    institutions_table.c.uuid,
-                    institutions_table.c.name
-                )
-            ).fetchall()
-
-        for row in rows:
-
-            row_dict = row._mapping
             institution_name = self._normalize(
-                row_dict.get(
-                    institutions_table.c.name
-                )
+                row.get("name")
             )
-            institution_uuid = row_dict.get(
-                institutions_table.c.uuid
+            institution_uuid = row.get(
+                "uuid"
             )
 
             if institution_name and institution_uuid:
 
                 lookup[
                     institution_name
-                ] = institution_uuid
+                ] = str(institution_uuid)
 
         logger.info(
-            "Loaded destination institution lookup: "
+            "Loaded CCExternalArticulatedRegistration destination institution lookup: "
             f"{len(lookup)} names"
         )
 
         return lookup
+
+    def _load_auth_institution_rows(
+        self
+    ):
+
+        auth_db_engine = self.get_lookup_engine(
+            "auth_db"
+        )
+
+        if auth_db_engine:
+
+            institutions_table = self._manual_reflect(
+                "institutions",
+                auth_db_engine,
+                self.metadata_dest
+            )
+
+            with auth_db_engine.connect() as auth_conn:
+
+                rows = auth_conn.execute(
+                    select(
+                        institutions_table.c.uuid,
+                        institutions_table.c.name
+                    )
+                    .where(
+                        institutions_table.c.deleted_at.is_(None)
+                    )
+                    .where(
+                        institutions_table.c.name.isnot(None)
+                    )
+                ).fetchall()
+
+            return [
+                dict(row._mapping)
+                for row in rows
+            ]
+
+        auth_database = self._auth_database()
+
+        logger.info(
+            "auth_db lookup engine not configured; loading "
+            f"institutions from schema {auth_database}."
+        )
+
+        try:
+
+            with self.dest_engine.connect() as auth_conn:
+
+                return auth_conn.execute(
+                    text(
+                        f"""
+                        SELECT uuid, name
+                        FROM `{auth_database}`.`institutions`
+                        WHERE deleted_at IS NULL
+                          AND name IS NOT NULL
+                          AND TRIM(name) <> ''
+                        """
+                    )
+                ).mappings().all()
+
+        except Exception as exc:
+
+            logger.warning(
+                "Failed loading auth institutions from schema "
+                f"{auth_database}: {exc}"
+            )
+
+            return []
+
+    def _auth_database(
+        self
+    ):
+
+        settings = self.config.get(
+            "institution_uuid_fix",
+            {}
+        )
+        auth_database = settings.get(
+            "auth_database"
+        ) or self.config.get(
+            "auth_database"
+        ) or self.DEFAULT_AUTH_DATABASE
+
+        if not self.IDENTIFIER_PATTERN.match(
+            str(auth_database)
+        ):
+
+            raise ValueError(
+                f"Invalid auth database identifier: {auth_database}"
+            )
+
+        return auth_database
 
     def _get_batch_size(self):
 
