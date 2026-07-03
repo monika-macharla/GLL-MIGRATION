@@ -1248,7 +1248,7 @@ class RecommendationLetterMigrator(BaseMigrator):
 
             return 2
 
-        return 1
+        return 2
 
     def _credential_status(
         self,

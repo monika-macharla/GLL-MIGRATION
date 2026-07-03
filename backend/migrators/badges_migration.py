@@ -174,10 +174,13 @@ class DigitalBadgesMigrator(BaseMigrator):
         fetched_count = 0
         skipped_count = 0
         skipped_existing = 0
+        skipped_inactive = 0
+        skipped_duplicate_badge = 0
         dynamic_user_count = 0
         dynamic_issuer_count = 0
         dynamic_institution_count = 0
         row_error_count = 0
+        migrated_badge_keys = set()
 
         last_source_id = 0
         remaining_limit = self.config.get("limit")
@@ -257,6 +260,24 @@ class DigitalBadgesMigrator(BaseMigrator):
 
                 try:
 
+                    if not self._should_migrate_badge(
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "active"
+                        ),
+                        self._get_source_value(
+                            row_dict,
+                            badge_table,
+                            "revoked"
+                        )
+                    ):
+
+                        skipped_count += 1
+                        skipped_inactive += 1
+
+                        continue
+
                     credential_path = self._badge_pdf_path(
                         source_badge_id
                     )
@@ -292,6 +313,25 @@ class DigitalBadgesMigrator(BaseMigrator):
                             if source_gl_student
                             else None
                         )
+                    )
+
+                    badge_key = self._source_badge_key(
+                        row_dict,
+                        badge_table,
+                        source_user_id,
+                        source_student_id,
+                        source_badge_id
+                    )
+
+                    if badge_key in migrated_badge_keys:
+
+                        skipped_count += 1
+                        skipped_duplicate_badge += 1
+
+                        continue
+
+                    migrated_badge_keys.add(
+                        badge_key
                     )
 
                     source_user = chunk_context[
@@ -692,6 +732,8 @@ class DigitalBadgesMigrator(BaseMigrator):
             f"fetched={fetched_count}, "
             f"skipped={skipped_count}, "
             f"skipped_existing={skipped_existing}, "
+            f"skipped_inactive={skipped_inactive}, "
+            f"skipped_duplicate_badge={skipped_duplicate_badge}, "
             f"dynamic_user={dynamic_user_count}, "
             f"dynamic_issuer={dynamic_issuer_count}, "
             f"dynamic_institution={dynamic_institution_count}, "
@@ -1103,6 +1145,53 @@ class DigitalBadgesMigrator(BaseMigrator):
             str(source_badge_id)
         )
 
+    def _should_migrate_badge(
+        self,
+        active,
+        revoked
+    ):
+
+        return (
+            self._is_truthy(active)
+            and
+            not self._is_truthy(revoked)
+        )
+
+    def _source_badge_key(
+        self,
+        row_dict,
+        badge_table,
+        source_user_id,
+        source_student_id,
+        source_badge_id
+    ):
+
+        badge_id = self._get_source_value(
+            row_dict,
+            badge_table,
+            "badge_id"
+        )
+
+        if badge_id:
+
+            owner_id = (
+                source_user_id
+                or
+                source_student_id
+                or
+                ""
+            )
+
+            return (
+                str(owner_id),
+                self._normalize(badge_id)
+            )
+
+        return (
+            "source",
+            str(source_badge_id)
+        )
+
     def _badge_uuid(
         self,
         source_badge_id
@@ -1260,13 +1349,13 @@ class DigitalBadgesMigrator(BaseMigrator):
 
         if self._is_truthy(revoked):
 
-            return 1
+            return 2
 
         if active is None:
 
             return 2
 
-        return 2 if self._is_truthy(active) else 1
+        return 2
 
     def _is_truthy(
         self,

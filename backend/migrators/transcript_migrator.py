@@ -25,14 +25,14 @@ class TranscriptMigrator(BaseMigrator):
         "fouryear": "4yr_transcript",
     }
     SOURCE_TRANSCRIPT_DOWNLOAD_PATHS = {
-        "highschool": ("highschool", "pdf_transcript"),
-        "communitycollege": ("community", "pdf_transcript"),
-        "fouryear": ("fouryear", "pdf_transcript"),
-    }
-    SOURCE_TRANSCRIPT_VIEW_PATHS = {
         "highschool": ("highschool", "pdf_transcript_student"),
         "communitycollege": ("community", "pdf_transcript_student"),
         "fouryear": ("fouryear", "pdf_transcript_student"),
+    }
+    SOURCE_TRANSCRIPT_VIEW_PATHS = {
+        "highschool": ("highschool", "pdf_transcript"),
+        "communitycollege": ("community", "pdf_transcript"),
+        "fouryear": ("fouryear", "pdf_transcript"),
     }
     TRANSCRIPT_TABLE_CANDIDATES = [
         "credentials_transcripts",
@@ -48,6 +48,9 @@ class TranscriptMigrator(BaseMigrator):
         "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
     )
     UPLOADS_PREFIX = "/uploads"
+    GPISD_TRANSCRIPT_PREFIX = (
+        "/uploads/users/greenlight/GPISD-PDF-Transcripts/signed"
+    )
     DYNAMIC_USER_VALUE = "DYNAMIC"
     DEFAULT_BATCH_SIZE = 10000
     MAX_BATCH_SIZE = 10000
@@ -88,6 +91,12 @@ class TranscriptMigrator(BaseMigrator):
 
         transcript_table = self._manual_reflect(
             self.SOURCE_TABLE,
+            self.source_engine,
+            self.metadata_source
+        )
+
+        legacy_transcript_table = self._manual_reflect(
+            "transcript",
             self.source_engine,
             self.metadata_source
         )
@@ -368,7 +377,9 @@ class TranscriptMigrator(BaseMigrator):
 
                         if not destination_user_uuid:
 
-                            destination_user_uuid = self.DYNAMIC_USER_VALUE
+                            skipped_count += 1
+
+                            continue
 
                     institution_uuid = (
                         institution_lookup.get(
@@ -401,40 +412,6 @@ class TranscriptMigrator(BaseMigrator):
                         source_transcript_id
                     )
 
-                    credential_path = self._credential_path(
-                        source_transcript_id,
-                        row_dict,
-                        transcript_table
-                    )
-                    view_transcript = self._view_transcript_path(
-                        source_transcript_id,
-                        row_dict,
-                        transcript_table
-                    )
-
-                    if not credential_path:
-
-                        nullable_missing_credential_id += 1
-
-                    if (
-                        (
-                            credential_path
-                            and
-                            credential_path in existing_credential_paths
-                        )
-                        or
-                        (
-                            view_transcript
-                            and
-                            view_transcript in existing_credential_paths
-                        )
-                    ):
-
-                        skipped_count += 1
-                        skipped_existing += 1
-
-                        continue
-
                     student_number = None
                     student_first_name = None
                     student_last_name = None
@@ -461,6 +438,52 @@ class TranscriptMigrator(BaseMigrator):
                         student_date_of_birth = source_gl_student.get(
                             "date_of_birth"
                         )
+
+                    gpisd_transcript_path = self._gpisd_transcript_path(
+                        institution_name,
+                        student_number
+                    )
+
+                    if gpisd_transcript_path:
+
+                        credential_path = gpisd_transcript_path
+                        view_transcript = gpisd_transcript_path
+
+                    else:
+
+                        credential_path = self._credential_path(
+                            source_transcript_id,
+                            row_dict,
+                            transcript_table
+                        )
+                        view_transcript = self._view_transcript_path(
+                            source_transcript_id,
+                            row_dict,
+                            transcript_table
+                        )
+
+                    if not credential_path:
+
+                        nullable_missing_credential_id += 1
+
+                    if (
+                        (
+                            credential_path
+                            and
+                            credential_path in existing_credential_paths
+                        )
+                        or
+                        (
+                            view_transcript
+                            and
+                            view_transcript in existing_credential_paths
+                        )
+                    ):
+
+                        skipped_count += 1
+                        skipped_existing += 1
+
+                        continue
 
                     enrollment_code = self._get_enrollment_code(
                         row_dict,
@@ -663,6 +686,43 @@ class TranscriptMigrator(BaseMigrator):
                 f"inserted_total={inserted_count}"
             )
 
+        legacy_counts = self._migrate_legacy_transcripts(
+            legacy_transcript_table,
+            source_student_table,
+            source_user_table,
+            source_enrollment_table,
+            transcript_dest_table,
+            credentials_table,
+            auth_institution_table,
+            auth_db_engine,
+            destination_user_lookup,
+            user_institution_lookup,
+            user_enrollment_lookup,
+            institution_lookup,
+            existing_credential_paths,
+            batch_size,
+            remaining_limit
+        )
+
+        inserted_count += legacy_counts["inserted"]
+        prepared_count += legacy_counts["prepared"]
+        fetched_count += legacy_counts["fetched"]
+        skipped_count += legacy_counts["skipped"]
+        nullable_missing_source_user += legacy_counts[
+            "nullable_missing_source_user"
+        ]
+        nullable_missing_destination_user += legacy_counts[
+            "nullable_missing_destination_user"
+        ]
+        skipped_missing_institution += legacy_counts[
+            "skipped_missing_institution"
+        ]
+        nullable_missing_credential_id += legacy_counts[
+            "nullable_missing_credential_id"
+        ]
+        skipped_existing += legacy_counts["skipped_existing"]
+        row_error_count += legacy_counts["row_errors"]
+
         if not prepared_count:
 
             logger.warning(
@@ -688,6 +748,463 @@ class TranscriptMigrator(BaseMigrator):
         )
 
         return inserted_count
+
+    def _migrate_legacy_transcripts(
+        self,
+        legacy_transcript_table,
+        source_student_table,
+        source_user_table,
+        source_enrollment_table,
+        transcript_dest_table,
+        credentials_table,
+        auth_institution_table,
+        auth_db_engine,
+        destination_user_lookup,
+        user_institution_lookup,
+        user_enrollment_lookup,
+        institution_lookup,
+        existing_credential_paths,
+        batch_size,
+        remaining_limit
+    ):
+
+        counts = {
+            "inserted": 0,
+            "prepared": 0,
+            "fetched": 0,
+            "skipped": 0,
+            "nullable_missing_source_user": 0,
+            "nullable_missing_destination_user": 0,
+            "skipped_missing_institution": 0,
+            "nullable_missing_credential_id": 0,
+            "skipped_existing": 0,
+            "row_errors": 0,
+        }
+
+        last_source_id = 0
+
+        while True:
+
+            fetch_size = batch_size
+
+            if remaining_limit is not None:
+
+                if remaining_limit <= 0:
+
+                    break
+
+                fetch_size = min(
+                    fetch_size,
+                    remaining_limit
+                )
+
+            with self.source_engine.connect() as source_conn:
+
+                rows = source_conn.execute(
+                    select(
+                        legacy_transcript_table
+                    )
+                    .where(
+                        legacy_transcript_table.c.id > last_source_id
+                    )
+                    .where(
+                        legacy_transcript_table.c.valid_to.is_(None)
+                    )
+                    .order_by(
+                        legacy_transcript_table.c.id
+                    )
+                    .limit(
+                        fetch_size
+                    )
+                ).fetchall()
+
+            if not rows:
+
+                break
+
+            counts["fetched"] += len(
+                rows
+            )
+
+            if remaining_limit is not None:
+
+                remaining_limit -= len(
+                    rows
+                )
+
+            chunk_context = self._build_chunk_context(
+                rows,
+                legacy_transcript_table,
+                source_student_table,
+                source_user_table,
+                source_enrollment_table
+            )
+
+            transcript_insert_data = []
+            credentials_insert_data = []
+
+            for row in rows:
+
+                row_dict = row._mapping
+                source_transcript_id = self._get_source_value(
+                    row_dict,
+                    legacy_transcript_table,
+                    "id"
+                )
+                last_source_id = source_transcript_id
+
+                try:
+
+                    source_student_id = self._get_source_value(
+                        row_dict,
+                        legacy_transcript_table,
+                        "student_id"
+                    )
+
+                    source_gl_student = chunk_context[
+                        "students"
+                    ].get(
+                        source_student_id
+                    )
+
+                    source_gl_user_id = (
+                        self._get_source_value(
+                            row_dict,
+                            legacy_transcript_table,
+                            "user_id"
+                        )
+                        or
+                        (
+                            source_gl_student.get("user_id")
+                            if source_gl_student
+                            else None
+                        )
+                    )
+
+                    source_gl_user = chunk_context[
+                        "users"
+                    ].get(
+                        source_gl_user_id
+                    )
+
+                    source_username = (
+                        source_gl_user.get("username")
+                        if source_gl_user
+                        else None
+                    )
+
+                    destination_user_uuid = (
+                        self._destination_user_uuid_from_source_user(
+                            source_gl_user,
+                            source_gl_user_id
+                        )
+                    )
+
+                    if not destination_user_uuid and source_username:
+
+                        destination_user_uuid = destination_user_lookup.get(
+                            self._normalize(source_username)
+                        )
+
+                    if not destination_user_uuid:
+
+                        if source_username:
+
+                            counts[
+                                "nullable_missing_destination_user"
+                            ] += 1
+
+                        else:
+
+                            counts[
+                                "nullable_missing_source_user"
+                            ] += 1
+
+                        counts[
+                            "skipped"
+                        ] += 1
+
+                        continue
+
+                    institution_uuid = (
+                        institution_lookup.get(
+                            self._get_source_value(
+                                row_dict,
+                                legacy_transcript_table,
+                                "institution_id"
+                            )
+                        )
+                        or
+                        user_institution_lookup.get(
+                            destination_user_uuid
+                        )
+                    )
+
+                    if not institution_uuid:
+
+                        counts["skipped"] += 1
+                        counts["skipped_missing_institution"] += 1
+
+                        continue
+
+                    institution_name = self._get_institution_name(
+                        auth_institution_table,
+                        auth_db_engine,
+                        institution_uuid
+                    )
+
+                    transcript_uuid = self._legacy_transcript_uuid(
+                        source_transcript_id
+                    )
+
+                    student_number = None
+                    student_first_name = None
+                    student_last_name = None
+                    student_date_of_birth = None
+
+                    if source_gl_student:
+
+                        student_number = (
+                            source_gl_student.get("school_student_id")
+                            or
+                            source_student_id
+                        )
+                        student_first_name = source_gl_student.get(
+                            "first_name"
+                        )
+                        student_last_name = source_gl_student.get(
+                            "last_name"
+                        )
+                        student_date_of_birth = source_gl_student.get(
+                            "date_of_birth"
+                        )
+
+                    gpisd_transcript_path = self._gpisd_transcript_path(
+                        institution_name,
+                        student_number
+                    )
+
+                    if gpisd_transcript_path:
+
+                        credential_path = gpisd_transcript_path
+
+                    else:
+
+                        credential_path = self._legacy_transcript_path(
+                            source_transcript_id
+                        )
+
+                    view_transcript = credential_path
+
+                    if (
+                        credential_path in existing_credential_paths
+                        or
+                        self._canonical_credential_path(
+                            credential_path
+                        ) in existing_credential_paths
+                    ):
+
+                        counts["skipped"] += 1
+                        counts["skipped_existing"] += 1
+
+                        continue
+
+                    enrollment_code = self._get_enrollment_code(
+                        row_dict,
+                        legacy_transcript_table,
+                        source_student_id,
+                        destination_user_uuid,
+                        user_enrollment_lookup,
+                        chunk_context
+                    )
+
+                    created_at = (
+                        self._get_source_value(
+                            row_dict,
+                            legacy_transcript_table,
+                            "issued_date"
+                        )
+                        or
+                        self._get_source_value(
+                            row_dict,
+                            legacy_transcript_table,
+                            "requested_time"
+                        )
+                        or
+                        datetime.utcnow()
+                    )
+
+                    status = self._map_status(
+                        self._get_source_value(
+                            row_dict,
+                            legacy_transcript_table,
+                            "status"
+                        )
+                    )
+
+                    transcript_row = {
+                        "uuid": transcript_uuid,
+                        "created_at": created_at,
+                        "updated_at": created_at,
+                        "deleted_at": None,
+                        "user_id": destination_user_uuid,
+                        "institution_id": institution_uuid,
+                        "status": status,
+                        "credential_type": self.CREDENTIAL_TYPE,
+                        "credential_path": credential_path,
+                        "view_transcript": view_transcript,
+                        "enrollment_code": enrollment_code,
+                        "created_by": destination_user_uuid,
+                        "updated_by": destination_user_uuid,
+                        "deleted_by": None,
+                        "generated_on": None,
+                    }
+
+                    credentials_row = {
+                        "uuid": str(uuid.uuid4()),
+                        "created_at": created_at,
+                        "updated_at": created_at,
+                        "deleted_at": None,
+                        "user_id": destination_user_uuid,
+                        "student_user_name": (
+                            source_username
+                            or
+                            self._fallback_student_user_name(
+                                row_dict,
+                                legacy_transcript_table,
+                                source_student_id
+                            )
+                        ),
+                        "student_first_name": student_first_name,
+                        "student_last_name": student_last_name,
+                        "institution_name": institution_name,
+                        "student_id": (
+                            str(student_number)
+                            if student_number is not None
+                            else None
+                        ),
+                        "student_email": source_username,
+                        "date_of_birth": (
+                            str(student_date_of_birth)
+                            if student_date_of_birth is not None
+                            else None
+                        ),
+                        "credential_claim_status": (
+                            self.CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED
+                        ),
+                        "is_registered": 1,
+                        "institution_id": institution_uuid,
+                        "status": status,
+                        "credential_type": self.CREDENTIAL_TYPE,
+                        "credential_path": credential_path,
+                        "enrollment_code": enrollment_code,
+                        "created_by": destination_user_uuid,
+                        "updated_by": destination_user_uuid,
+                        "deleted_by": None,
+                        "transcripts": transcript_uuid,
+                        "generated_on": None,
+                        "issued_on": (
+                            str(created_at)
+                            if created_at is not None
+                            else None
+                        ),
+                        "student_number": (
+                            str(student_number)
+                            if student_number is not None
+                            else None
+                        ),
+                    }
+
+                    self._set_if_column(
+                        credentials_row,
+                        credentials_table,
+                        "blockchain_hash",
+                        self._get_source_value(
+                            row_dict,
+                            legacy_transcript_table,
+                            "blockchain_hash"
+                        )
+                    )
+
+                    transcript_insert_data.append(
+                        self._filter_to_table_columns(
+                            transcript_row,
+                            transcript_dest_table
+                        )
+                    )
+                    credentials_insert_data.append(
+                        self._filter_to_table_columns(
+                            credentials_row,
+                            credentials_table
+                        )
+                    )
+
+                    existing_credential_paths.add(
+                        credential_path
+                    )
+                    existing_credential_paths.add(
+                        self._canonical_credential_path(
+                            credential_path
+                        )
+                    )
+
+                except Exception as error:
+
+                    counts["skipped"] += 1
+                    counts["row_errors"] += 1
+
+                    logger.exception(
+                        "Failed processing legacy transcript source id "
+                        f"{source_transcript_id}: {error}"
+                    )
+
+            if not transcript_insert_data:
+
+                logger.info(
+                    "Legacy transcript chunk fetched "
+                    f"{len(rows)} rows through source id "
+                    f"{last_source_id}; nothing to insert."
+                )
+
+                continue
+
+            logger.info(
+                "Inserting legacy transcript chunk: "
+                f"prepared={len(transcript_insert_data)}, "
+                f"source_id_through={last_source_id}"
+            )
+
+            with self.dest_engine.begin() as dest_conn:
+
+                transcript_result = dest_conn.execute(
+                    insert(transcript_dest_table),
+                    transcript_insert_data
+                )
+                credentials_result = dest_conn.execute(
+                    insert(credentials_table),
+                    credentials_insert_data
+                )
+
+            inserted_now = (
+                transcript_result.rowcount
+                or
+                len(transcript_insert_data)
+            )
+
+            counts["inserted"] += inserted_now
+            counts["prepared"] += len(
+                transcript_insert_data
+            )
+
+            logger.info(
+                "Legacy transcript chunk inserted: "
+                f"transcripts={inserted_now}, "
+                f"credentials_all="
+                f"{credentials_result.rowcount or len(credentials_insert_data)}, "
+                f"inserted_total={counts['inserted']}"
+            )
+
+        return counts
 
     def _resolve_transcript_destination_table_name(self):
 
@@ -1333,6 +1850,30 @@ class TranscriptMigrator(BaseMigrator):
             )
         )
 
+    def _legacy_transcript_uuid(
+        self,
+        source_transcript_id
+    ):
+
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"gll:legacy-transcript:{source_transcript_id}"
+            )
+        )
+
+    def _legacy_transcript_path(
+        self,
+        source_transcript_id
+    ):
+
+        return (
+            f"{self.UPLOADS_PREFIX}/"
+            f"shared/"
+            f"{source_transcript_id}/"
+            f"pdf_transcript"
+        )
+
     def _destination_user_uuid_from_source_user(
         self,
         source_gl_user,
@@ -1410,6 +1951,25 @@ class TranscriptMigrator(BaseMigrator):
         )
 
         return f"transcript-{source_transcript_id}"
+
+    def _gpisd_transcript_path(
+        self,
+        institution_name,
+        student_number
+    ):
+
+        if not student_number:
+
+            return None
+
+        if self._normalize(institution_name) != "grand prairie isd":
+
+            return None
+
+        return (
+            f"{self.GPISD_TRANSCRIPT_PREFIX}/"
+            f"{student_number}.pdf"
+        )
 
     def _credential_path(
         self,
@@ -1622,7 +2182,7 @@ class TranscriptMigrator(BaseMigrator):
 
             return 2
 
-        return 1
+        return 2
 
     def _set_if_column(
         self,

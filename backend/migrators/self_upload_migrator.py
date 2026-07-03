@@ -1063,21 +1063,7 @@ class SelfUploadMigrator(BaseMigrator):
         active
     ):
 
-        if isinstance(active, bool):
-
-            return 2 if active else 1
-
-        if isinstance(active, bytes):
-
-            return 2 if active == b"\x01" else 1
-
-        return 2 if str(active).strip().lower() in [
-            "1",
-            "true",
-            "yes",
-            "y",
-            "\\x01",
-        ] else 1
+        return 2
 
     def _get_file_type(
         self,

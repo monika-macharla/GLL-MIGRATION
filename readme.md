@@ -49,12 +49,14 @@ update module_permissions set is_accessible = 1
 
 ==========================================================================================================================
 2. gllreports
-1.update script to status available instead of accepted
+1.update script to status 2 instead of 1
 2update credentials_transcripts vice-versa view and download columns also in credentials_all
-in all the credentials_transcripts,credentials_digital_badges,credentials_recommendation_letters, credentials_resume,credentials_self_uploads amke status = 2 where status = 1
+3. in all the credentials_transcripts,credentials_digital_badges,credentials_recommendation_letters, credentials_resume,credentials_self_uploads amke status = 2 where status = 1
 
 17. transcript                           credentials_transcript, credentials_all
                                          credential_path = /uploads/highschool/{transcript.credential_id}/pdf_transcript_student
+for gpisd chanhe the url to "users/greenlight/GPISD-PDF-Transcripts/signed/<student_number>.pdf"
+
 18. certificate                     p     credentials_certifications, credentials_all
 
 

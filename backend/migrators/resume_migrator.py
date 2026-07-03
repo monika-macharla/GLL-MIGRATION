@@ -161,6 +161,7 @@ class ResumeMigrator(BaseMigrator):
         fetched_count = 0
         skipped_count = 0
         skipped_existing = 0
+        skipped_inactive = 0
         dynamic_user_count = 0
         dynamic_institution_count = 0
         row_error_count = 0
@@ -241,6 +242,19 @@ class ResumeMigrator(BaseMigrator):
                 last_source_id = source_resume_id
 
                 try:
+
+                    if not self._should_migrate_resume(
+                        self._get_source_value(
+                            row_dict,
+                            resume_table,
+                            "active"
+                        )
+                    ):
+
+                        skipped_count += 1
+                        skipped_inactive += 1
+
+                        continue
 
                     file_path = self._resume_path(
                         source_resume_id
@@ -544,6 +558,7 @@ class ResumeMigrator(BaseMigrator):
             f"fetched={fetched_count}, "
             f"skipped={skipped_count}, "
             f"skipped_existing={skipped_existing}, "
+            f"skipped_inactive={skipped_inactive}, "
             f"dynamic_user={dynamic_user_count}, "
             f"dynamic_institution={dynamic_institution_count}, "
             f"row_errors={row_error_count}"
@@ -1033,21 +1048,37 @@ class ResumeMigrator(BaseMigrator):
         active
     ):
 
-        if isinstance(active, bool):
+        return 2
 
-            return 2 if active else 1
+    def _should_migrate_resume(
+        self,
+        active
+    ):
 
-        if isinstance(active, bytes):
+        return self._is_truthy(
+            active
+        )
 
-            return 2 if active == b"\x01" else 1
+    def _is_truthy(
+        self,
+        value
+    ):
 
-        return 2 if str(active).strip().lower() in [
+        if isinstance(value, bool):
+
+            return value
+
+        if isinstance(value, bytes):
+
+            return value == b"\x01"
+
+        return str(value).strip().lower() in [
             "1",
             "true",
             "yes",
             "y",
             "\\x01",
-        ] else 1
+        ]
 
     def _get_file_type(
         self,
