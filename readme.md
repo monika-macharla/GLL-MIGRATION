@@ -30,14 +30,19 @@ jhi_user                               user_hashed_password_expires_at
 
 11. ferpa                             ferpa
 
+ALTER TABLE scholarship_prefernces
+ADD COLUMN city VARCHAR(255) NULL DEFAULT NULL,
+ADD COLUMN situation VARCHAR(255) NULL DEFAULT NULL;
+
 12. nsapi_criteria                    scholarship_prefernces
 
+
 13. student_credential_visibility     module_permissions
+update module_permissions set is_accessible = 1
 
 14. institution_user                  user_campus
 
 16. scholarship_activity             scholarship_user_activity
-alter table ScholarshipPreferences add column city and situation
 
 17. esc_sftp_user                    institution_sftp_credentials
 

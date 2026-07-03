@@ -29,6 +29,68 @@ class NsapiPreferencesMigrator(BaseMigrator):
         "prefer not to say": 4,
     }
 
+    STATE_MAPPING = {
+        "AL": 1, "ALABAMA": 1,
+        "AK": 2, "ALASKA": 2,
+        "AS": 3, "AMERICAN_SAMOA": 3, "AMERICAN SAMOA": 3,
+        "AZ": 4, "ARIZONA": 4,
+        "AR": 5, "ARKANSAS": 5,
+        "CA": 6, "CALIFORNIA": 6,
+        "CO": 7, "COLORADO": 7,
+        "CT": 8, "CONNECTICUT": 8,
+        "DE": 9, "DELAWARE": 9,
+        "DC": 10, "DISTRICT_OF_COLUMBIA": 10, "DISTRICT OF COLUMBIA": 10,
+        "FM": 11, "FEDERATED_STATES_OF_MICRONESIA": 11, "FEDERATED STATES OF MICRONESIA": 11,
+        "FL": 12, "FLORIDA": 12,
+        "GA": 13, "GEORGIA": 13,
+        "GU": 14, "GUAM": 14,
+        "HI": 15, "HAWAII": 15,
+        "ID": 16, "IDAHO": 16,
+        "IL": 17, "ILLINOIS": 17,
+        "IN": 18, "INDIANA": 18,
+        "IA": 19, "IOWA": 19,
+        "KS": 20, "KANSAS": 20,
+        "KY": 21, "KENTUCKY": 21,
+        "LA": 22, "LOUISIANA": 22,
+        "ME": 23, "MAINE": 23,
+        "MH": 24, "MARSHALL_ISLANDS": 24, "MARSHALL ISLANDS": 24,
+        "MD": 25, "MARYLAND": 25,
+        "MA": 26, "MASSACHUSETTS": 26,
+        "MI": 27, "MICHIGAN": 27,
+        "MN": 28, "MINNESOTA": 28,
+        "MS": 29, "MISSISSIPPI": 29,
+        "MO": 30, "MISSOURI": 30,
+        "MT": 31, "MONTANA": 31,
+        "NE": 32, "NEBRASKA": 32,
+        "NV": 33, "NEVADA": 33,
+        "NH": 34, "NEW_HAMPSHIRE": 34, "NEW HAMPSHIRE": 34,
+        "NJ": 35, "NEW_JERSEY": 35, "NEW JERSEY": 35,
+        "NM": 36, "NEW_MEXICO": 36, "NEW MEXICO": 36,
+        "NY": 37, "NEW_YORK": 37, "NEW YORK": 37,
+        "NC": 38, "NORTH_CAROLINA": 38, "NORTH CAROLINA": 38,
+        "ND": 39, "NORTH_DAKOTA": 39, "NORTH DAKOTA": 39,
+        "MP": 40, "NORTHERN_MARIANA_ISLANDS": 40, "NORTHERN MARIANA ISLANDS": 40,
+        "OH": 41, "OHIO": 41,
+        "OK": 42, "OKLAHOMA": 42,
+        "OR": 43, "OREGON": 43,
+        "PW": 44, "PALAU": 44,
+        "PA": 45, "PENNSYLVANIA": 45,
+        "PR": 46, "PUERTO_RICO": 46, "PUERTO RICO": 46,
+        "RI": 47, "RHODE_ISLAND": 47, "RHODE ISLAND": 47,
+        "SC": 48, "SOUTH_CAROLINA": 48, "SOUTH CAROLINA": 48,
+        "SD": 49, "SOUTH_DAKOTA": 49, "SOUTH DAKOTA": 49,
+        "TN": 50, "TENNESSEE": 50,
+        "TX": 51, "TEXAS": 51,
+        "UT": 52, "UTAH": 52,
+        "VT": 53, "VERMONT": 53,
+        "VI": 54, "VIRGIN_ISLANDS": 54, "VIRGIN ISLANDS": 54,
+        "VA": 55, "VIRGINIA": 55,
+        "WA": 56, "WASHINGTON": 56,
+        "WV": 57, "WEST_VIRGINIA": 57, "WEST VIRGINIA": 57,
+        "WI": 58, "WISCONSIN": 58,
+        "WY": 59, "WYOMING": 59,
+    }
+
     def __init__(
         self,
         engine,
@@ -47,6 +109,7 @@ class NsapiPreferencesMigrator(BaseMigrator):
 
         self.config = config
         self._destination_user_lookup = {}
+        self._college_code_lookup = {}
 
     def migrate(self) -> int:
 
@@ -95,6 +158,8 @@ class NsapiPreferencesMigrator(BaseMigrator):
                 users_table
             )
         )
+
+        self._college_code_lookup = self._build_college_code_lookup()
 
         existing_student_uuids = (
             self._load_existing_student_uuids(
@@ -264,8 +329,10 @@ class NsapiPreferencesMigrator(BaseMigrator):
                             criteria.get("age"),
                             default=0
                         ),
-                        "state": self._clean_value(criteria.get("state")),
-                        "country": self._clean_value(criteria.get("country")),
+                        "state": self._map_state(
+                            criteria.get("state")
+                        ),
+                        "country": 1,
                         "ethinicity": self._clean_value(
                             criteria.get("ethnicity")
                         ),
@@ -322,18 +389,68 @@ class NsapiPreferencesMigrator(BaseMigrator):
                         "college_preferences": self._json_column_value(
                             destination_table,
                             "college_preferences",
-                            criteria.get("collegeChoice")
+                            self._build_value_subvalue_preferences(
+                                criteria.get("collegeChoice"),
+                                value_keys=[
+                                    "value",
+                                    "name",
+                                    "college",
+                                    "collegeName",
+                                    "institution",
+                                    "institutionName",
+                                    "schoolName",
+                                    "school",
+                                    "label",
+                                    "title"
+                                ],
+                                sub_value_keys=[
+                                    "subValue",
+                                    "code",
+                                    "collegeCode",
+                                    "institutionCode",
+                                    "schoolCode",
+                                    "schoolId",
+                                    "ceebCode",
+                                    "ceeb",
+                                    "ipeds",
+                                    "opeId",
+                                    "id"
+                                ]
+                            )
                         ),
                         "intended_major": self._json_column_value(
                             destination_table,
                             "intended_major",
-                            criteria.get("intendedMajor")
+                            self._build_value_subvalue_preferences(
+                                criteria.get("intendedMajor"),
+                                value_keys=[
+                                    "value",
+                                    "name",
+                                    "major",
+                                    "majorName",
+                                    "cipTitle",
+                                    "label",
+                                    "title"
+                                ],
+                                sub_value_keys=[
+                                    "subValue",
+                                    "code",
+                                    "majorCode",
+                                    "cipCode",
+                                    "cip",
+                                    "id"
+                                ]
+                            )
                         ),
-                        "city": self._clean_value(criteria.get("city")),
+                        "city": self._string_value(
+                            criteria.get("city")
+                        ),
                         "situation": self._json_column_value(
                             destination_table,
                             "situation",
-                            criteria.get("situation")
+                            self._situation_value(
+                                criteria.get("situation")
+                            )
                         ),
                         "gender": self._map_gender(
                             criteria.get("gender")
@@ -594,6 +711,516 @@ class NsapiPreferencesMigrator(BaseMigrator):
         )
 
         return lookup
+
+    def _build_college_code_lookup(self):
+
+        lookup = {}
+
+        self._add_college_code_lookup_rows(
+            lookup,
+            self.source_engine,
+            self.metadata_source,
+            "institution",
+            name_columns=[
+                "name",
+                "alias_name",
+                "edi_name"
+            ],
+            code_columns=[
+                "qual_code",
+                "school_code",
+                "nsc_receiver_id"
+            ]
+        )
+
+        self._add_college_code_lookup_rows(
+            lookup,
+            self.dest_engine,
+            self.metadata_dest,
+            "institutions",
+            name_columns=[
+                "name"
+            ],
+            code_columns=[
+                "qual_code",
+                "nsc_receiver_id"
+            ]
+        )
+
+        logger.info(
+            f"Built {len(lookup)} college preference code lookups"
+        )
+
+        return lookup
+
+    def _add_college_code_lookup_rows(
+        self,
+        lookup,
+        engine,
+        metadata,
+        table_name,
+        name_columns,
+        code_columns
+    ):
+
+        inspector = inspect(
+            engine
+        )
+
+        if table_name not in inspector.get_table_names():
+
+            return
+
+        table = self._manual_reflect(
+            table_name,
+            engine,
+            metadata
+        )
+
+        available_name_columns = [
+            column_name
+            for column_name in name_columns
+            if column_name in table.c
+        ]
+        available_code_columns = [
+            column_name
+            for column_name in code_columns
+            if column_name in table.c
+        ]
+
+        if not available_name_columns or not available_code_columns:
+
+            return
+
+        selected_columns = [
+            table.c[column_name]
+            for column_name in (
+                available_name_columns
+                + available_code_columns
+            )
+        ]
+
+        with engine.connect() as conn:
+
+            rows = conn.execute(
+                select(
+                    *selected_columns
+                )
+            ).fetchall()
+
+        for row in rows:
+
+            row_map = row._mapping
+            code = None
+
+            for column_name in available_code_columns:
+
+                code = self._clean_value(
+                    row_map.get(
+                        table.c[column_name]
+                    )
+                )
+
+                if code is not None:
+
+                    break
+
+            if code is None:
+
+                continue
+
+            for column_name in available_name_columns:
+
+                name = self._clean_value(
+                    row_map.get(
+                        table.c[column_name]
+                    )
+                )
+
+                if name is None:
+
+                    continue
+
+                lookup.setdefault(
+                    self._normalize_college_name(
+                        name
+                    ),
+                    code
+                )
+
+    def _normalize_college_name(
+        self,
+        value
+    ):
+
+        text = str(
+            value or ""
+        ).lower()
+
+        text = text.replace(
+            "&",
+            "and"
+        )
+
+        return "".join(
+            character
+            for character in text
+            if character.isalnum()
+        )
+
+    def _map_state(
+        self,
+        state
+    ):
+
+        state = self._clean_value(
+            state
+        )
+
+        if state is None:
+
+            return 0
+
+        if isinstance(state, int):
+
+            return state if 0 <= state <= 59 else 0
+
+        state_key = str(
+            state
+        ).strip().upper()
+
+        if state_key.isdigit():
+
+            state_number = int(
+                state_key
+            )
+
+            return state_number if 0 <= state_number <= 59 else 0
+
+        return self.STATE_MAPPING.get(
+            state_key,
+            self.STATE_MAPPING.get(
+                state_key.replace(
+                    " ",
+                    "_"
+                ),
+                0
+            )
+        )
+
+    def _string_value(
+        self,
+        value
+    ):
+
+        value = self._clean_value(
+            value
+        )
+
+        if value is None:
+
+            return ""
+
+        if isinstance(value, (list, dict)):
+
+            return json.dumps(
+                value,
+                ensure_ascii=False,
+                separators=(",", ":")
+            )
+
+        return str(
+            value
+        )
+
+    def _situation_value(
+        self,
+        value
+    ):
+
+        values = self._as_list(
+            value
+        )
+
+        cleaned_values = [
+            str(item)
+            for item in values
+            if self._clean_value(item) is not None
+        ]
+
+        return cleaned_values or [
+            " "
+        ]
+
+    def _build_value_subvalue_preferences(
+        self,
+        value,
+        value_keys,
+        sub_value_keys
+    ):
+
+        preferences = []
+
+        for item in self._as_list(value):
+
+            if isinstance(item, dict):
+
+                preference_value = self._first_present(
+                    item,
+                    value_keys
+                )
+                preference_sub_value = self._first_present(
+                    item,
+                    sub_value_keys
+                )
+
+                if preference_value is None:
+
+                    preference_value, preference_sub_value = (
+                        self._value_subvalue_from_mapping(
+                            item
+                        )
+                    )
+
+            else:
+
+                preference_value, preference_sub_value = (
+                    self._value_subvalue_from_text(
+                        item
+                    )
+                )
+
+            preference_value = self._clean_value(
+                preference_value
+            )
+            preference_sub_value = self._clean_value(
+                preference_sub_value
+            )
+
+            if preference_value is None:
+
+                continue
+
+            if preference_sub_value in [
+                None,
+                ""
+            ]:
+
+                preference_sub_value = (
+                    self._college_code_lookup.get(
+                        self._normalize_college_name(
+                            preference_value
+                        )
+                    )
+                )
+
+            preferences.append({
+                "value": str(
+                    preference_value
+                ),
+                "subValue": (
+                    ""
+                    if preference_sub_value is None
+                    else str(preference_sub_value)
+                ),
+            })
+
+        return preferences
+
+    def _value_subvalue_from_mapping(
+        self,
+        item
+    ):
+
+        values = [
+            self._clean_value(value)
+            for value in item.values()
+            if self._clean_value(value) is not None
+        ]
+
+        if not values:
+
+            return None, None
+
+        display_values = [
+            value
+            for value in values
+            if not self._looks_like_code(value)
+        ]
+
+        code_values = [
+            value
+            for value in values
+            if self._looks_like_code(value)
+        ]
+
+        if display_values:
+
+            return display_values[0], (
+                code_values[0]
+                if code_values
+                else ""
+            )
+
+        return values[0], (
+            values[1]
+            if len(values) > 1
+            else ""
+        )
+
+    def _value_subvalue_from_text(
+        self,
+        value
+    ):
+
+        value = self._clean_value(
+            value
+        )
+
+        if value is None:
+
+            return None, None
+
+        text = str(
+            value
+        ).strip()
+
+        for delimiter in [
+            "|",
+            "::",
+            " - "
+        ]:
+
+            if delimiter not in text:
+
+                continue
+
+            left, right = [
+                part.strip()
+                for part in text.split(
+                    delimiter,
+                    1
+                )
+            ]
+
+            if self._looks_like_code(left) and not self._looks_like_code(right):
+
+                return right, left
+
+            return left, right
+
+        return text, ""
+
+    def _looks_like_code(
+        self,
+        value
+    ):
+
+        text = str(
+            value
+        ).strip()
+
+        if not text:
+
+            return False
+
+        return all(
+            character.isdigit()
+            or character == "."
+            for character in text
+        )
+
+    def _as_list(
+        self,
+        value
+    ):
+
+        value = self._clean_value(
+            value
+        )
+
+        if value is None:
+
+            return []
+
+        if isinstance(value, list):
+
+            return value
+
+        if isinstance(value, tuple):
+
+            return list(
+                value
+            )
+
+        if isinstance(value, dict):
+
+            return [
+                value
+            ]
+
+        if isinstance(value, bytes):
+
+            value = value.decode(
+                "utf-8"
+            )
+
+        text = str(
+            value
+        ).strip()
+
+        if not text:
+
+            return []
+
+        try:
+
+            parsed = json.loads(
+                text
+            )
+
+            if isinstance(parsed, list):
+
+                return parsed
+
+            if parsed is None:
+
+                return []
+
+            return [
+                parsed
+            ]
+
+        except json.JSONDecodeError:
+
+            return [
+                item.strip()
+                for item in text.split(",")
+                if item.strip()
+            ]
+
+    def _first_present(
+        self,
+        item,
+        keys
+    ):
+
+        normalized_item = {
+            self._normalize(key): value
+            for key, value in item.items()
+        }
+
+        for key in keys:
+
+            value = normalized_item.get(
+                self._normalize(key)
+            )
+
+            if self._clean_value(value) is not None:
+
+                return value
+
+        return None
 
     def _json_column_value(
         self,
