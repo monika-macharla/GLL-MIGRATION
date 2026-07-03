@@ -24,6 +24,8 @@ class RecommendationLetterMigrator(BaseMigrator):
     CREDENTIAL_CLAIM_STATUS_NOT_CLAIMED = 2
     STATUS_AVAILABLE = 2
     STATUS_REQUESTED = 3
+    STATUS_ACCEPTED = 1
+    STATUS_REJECTED = 4
     DYNAMIC_VALUE = "DYNAMIC"
     LEGACY_S3_BASE_URL = (
         "https://greenlightlocker-com.s3.us-west-2.amazonaws.com"
@@ -174,6 +176,8 @@ class RecommendationLetterMigrator(BaseMigrator):
         fetched_count = 0
         skipped_count = 0
         skipped_existing = 0
+        skipped_confidential_initial = 0
+        skipped_unsupported_status = 0
         dynamic_user_count = 0
         dynamic_institution_count = 0
         row_error_count = 0
@@ -424,10 +428,6 @@ class RecommendationLetterMigrator(BaseMigrator):
                         "request_status"
                     )
 
-                    status = self._credential_status(
-                        credential_path
-                    )
-
                     is_confidential = (
                         1
                         if self._is_truthy(
@@ -440,6 +440,29 @@ class RecommendationLetterMigrator(BaseMigrator):
                         else
                         0
                     )
+
+                    status = self._credential_status(
+                        request_status,
+                        credential_path
+                    )
+
+                    if (
+                        status == self.STATUS_REQUESTED
+                        and
+                        is_confidential
+                    ):
+
+                        skipped_count += 1
+                        skipped_confidential_initial += 1
+
+                        continue
+
+                    if status is None:
+
+                        skipped_count += 1
+                        skipped_unsupported_status += 1
+
+                        continue
 
                     recommendation_row = {
                         "uuid": recommendation_uuid,
@@ -646,6 +669,8 @@ class RecommendationLetterMigrator(BaseMigrator):
             f"fetched={fetched_count}, "
             f"skipped={skipped_count}, "
             f"skipped_existing={skipped_existing}, "
+            f"skipped_confidential_initial={skipped_confidential_initial}, "
+            f"skipped_unsupported_status={skipped_unsupported_status}, "
             f"dynamic_user={dynamic_user_count}, "
             f"dynamic_institution={dynamic_institution_count}, "
             f"row_errors={row_error_count}"
@@ -1252,14 +1277,40 @@ class RecommendationLetterMigrator(BaseMigrator):
 
     def _credential_status(
         self,
+        request_status,
         credential_path
-    ) -> int:
+    ):
 
-        if credential_path:
+        normalized_status = (
+            str(request_status or "")
+            .strip()
+            .lower()
+        )
 
-            return self.STATUS_AVAILABLE
+        if normalized_status == "issued":
 
-        return self.STATUS_REQUESTED
+            if credential_path:
+
+                return self.STATUS_AVAILABLE
+
+            return self.STATUS_REQUESTED
+
+        if normalized_status == "accepted":
+
+            return self.STATUS_ACCEPTED
+
+        if normalized_status in [
+            "initial",
+            "requested",
+        ]:
+
+            return self.STATUS_REQUESTED
+
+        if normalized_status == "rejected":
+
+            return self.STATUS_REJECTED
+
+        return None
 
     def _is_truthy(
         self,

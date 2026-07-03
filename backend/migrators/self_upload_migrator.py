@@ -161,6 +161,7 @@ class SelfUploadMigrator(BaseMigrator):
         fetched_count = 0
         skipped_count = 0
         skipped_existing = 0
+        skipped_inactive = 0
         dynamic_user_count = 0
         dynamic_institution_count = 0
         row_error_count = 0
@@ -241,6 +242,19 @@ class SelfUploadMigrator(BaseMigrator):
                 last_source_id = source_other_credential_id
 
                 try:
+
+                    if not self._should_migrate_self_upload(
+                        self._get_source_value(
+                            row_dict,
+                            source_table,
+                            "active"
+                        )
+                    ):
+
+                        skipped_count += 1
+                        skipped_inactive += 1
+
+                        continue
 
                     credential_path = self._self_upload_path(
                         source_other_credential_id
@@ -564,6 +578,7 @@ class SelfUploadMigrator(BaseMigrator):
             f"fetched={fetched_count}, "
             f"skipped={skipped_count}, "
             f"skipped_existing={skipped_existing}, "
+            f"skipped_inactive={skipped_inactive}, "
             f"dynamic_user={dynamic_user_count}, "
             f"dynamic_institution={dynamic_institution_count}, "
             f"row_errors={row_error_count}"
@@ -1064,6 +1079,36 @@ class SelfUploadMigrator(BaseMigrator):
     ):
 
         return 2
+
+    def _should_migrate_self_upload(
+        self,
+        active
+    ):
+
+        return self._is_truthy(
+            active
+        )
+
+    def _is_truthy(
+        self,
+        value
+    ):
+
+        if isinstance(value, bool):
+
+            return value
+
+        if isinstance(value, bytes):
+
+            return value == b"\x01"
+
+        return str(value).strip().lower() in [
+            "1",
+            "true",
+            "yes",
+            "y",
+            "\\x01",
+        ]
 
     def _get_file_type(
         self,
