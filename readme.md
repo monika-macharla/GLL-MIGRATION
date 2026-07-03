@@ -5,12 +5,13 @@ source db:                          destination db
 
 1. insert roles
 
+add missing columns in user_profile
 2. institution                         institutions,campuses(gllauthservicemigration)
 
 3. gl_user                             users(gllauthservicemigration)
 
 4. gl_user                              user_role
-
+update the user_role site_administrator uuid to issuing adminId
 5. gl_user                              user_institution
 
 gl_parent_student                       parent_student
@@ -37,13 +38,16 @@ jhi_user                               user_hashed_password_expires_at
 14. institution_user                  user_campus
 
 16. scholarship_activity             scholarship_user_activity
+alter table ScholarshipPreferences add column city and situation
 
 17. esc_sftp_user                    institution_sftp_credentials
 
 
 ==========================================================================================================================
 2. gllreports
-
+1.update script to status available instead of accepted
+2update credentials_transcripts vice-versa view and download columns also in credentials_all
+in all the credentials_transcripts,credentials_digital_badges,credentials_recommendation_letters, credentials_resume,credentials_self_uploads amke status = 2 where status = 1
 
 17. transcript                           credentials_transcript, credentials_all
                                          credential_path = /uploads/highschool/{transcript.credential_id}/pdf_transcript_student
@@ -133,11 +137,6 @@ python3 backend/import_blockchain_mapping_csv.py /path/to/csv-folder \
 
 CSV headers should match columns in `blockchain_mapping`. Extra CSV columns are
 ignored, blank values are imported as `NULL`, and files are inserted in batches.
-
-
-
-
-
 
 
 
@@ -620,7 +619,6 @@ mapped enrollment_code
 NULL
     → generated_on
 
-
 ------------------------------------------------------------
 credentials_all COLUMN MAPPING
 ------------------------------------------------------------
@@ -779,3 +777,42 @@ SPEEDE / EDI formats:
 NSC receiver formats:
 - NSC S3 path: `https://greenlightlocker-com.s3.us-west-2.amazonaws.com/nsc/TRANSCRIPT_TO-{nscReceiverId}_{YYYYMMDD}_GreenLight_{student.lastName}.pdf`
 - Applicable types: HS, CTC, HE
+
+
+---------------------------+--------------------------------------+--------------------+-------------------------+
+| name                      | uuid                                 | code               | deleted_at              |
++---------------------------+--------------------------------------+--------------------+-------------------------+
+| Parent                    | 0500cc69-6d28-11f1-9281-0a056431aab1 | parent             | NULL                    |
+| Parent                    | 3749c4be-5356-11f1-9e17-9ec94fb9ef68 | parent             | NULL                    |
+| Support Admin             | 61cd729a-2449-11f1-a658-f21e44723a79 | support_admin      | NULL                    |
+| institution_admin         | 670d825f-390f-480b-a86a-b46f72649ea0 | institution_admin  | 2026-06-09 06:47:42.000 |
+| Student                   | ad997255-1b84-11f1-a658-f21e44723a79 | student            | NULL                    |
+| Super Admin               | ad9fb10d-1b84-11f1-a658-f21e44723a79 | super_admin        | NULL                    |
+| Counsellor                | ada3170f-1b84-11f1-a658-f21e44723a79 | counsellor         | NULL                    |
+| Receiver                  | ada3459a-1b84-11f1-a658-f21e44723a79 | receiver           | NULL                    |
+| Site Administrator        | ada36ca5-1b84-11f1-a658-f21e44723a79 | site_administrator | NULL                    |
+| Developer                 | ada3a018-1b84-11f1-a658-f21e44723a79 | developer          | NULL                    |
+| Recruiter                 | ada3cf21-1b84-11f1-a658-f21e44723a79 | recruiter          | NULL                    |
+| Recommender               | ada3f52c-1b84-11f1-a658-f21e44723a79 | recommender        | NULL                    |
+| Service Provider          | ada4261b-1b84-11f1-a658-f21e44723a79 | service_provider   | NULL                    |
+| Career Services           | ada44a68-1b84-11f1-a658-f21e44723a79 | career_services    | NULL                    |
+| Institution Administrator | ada44a68-1b84-11f1-a658-f21e44723a80 | institution_admin  | NULL                    |
+| Counsellor Admin          | af13bd51-3a2a-11f1-b7c7-82aa6a9a186b | counsellor_admin   | NULL                    |
+| Receiver Admin            | af157c47-3a2a-11f1-b7c7-82aa6a9a186b | receiver_admin     | NULL                    |
+| Student                   | c107f0c0-6d27-11f1-9281-0a056431aab1 | student            | NULL                    |
+| Super Admin               | c2a7fe85-6d27-11f1-9281-0a056431aab1 | super_admin        | NULL                    |
+| Counsellor                | c47ccf87-6d27-11f1-9281-0a056431aab1 | counsellor         | NULL                    |
+| Receiver                  | c4ac0d2b-6d27-11f1-9281-0a056431aab1 | receiver           | 2026-06-21 04:15:07.684 |
+| Site Administrator        | c4da80db-6d27-11f1-9281-0a056431aab1 | site_administrator | 2026-06-21 04:15:07.684 |
+| Developer                 | c4ff8625-6d27-11f1-9281-0a056431aab1 | developer          | 2026-06-21 04:15:07.684 |
+| Recruiter                 | c528b3fe-6d27-11f1-9281-0a056431aab1 | recruiter          | 2026-06-21 04:15:07.684 |
+| Recommender               | c557ef97-6d27-11f1-9281-0a056431aab1 | recommender        | 2026-06-21 04:15:07.684 |
+| Service Provider          | c586660d-6d27-11f1-9281-0a056431aab1 | service_provider   | 2026-06-21 04:15:07.684 |
+| Career Services           | c5b57ef1-6d27-11f1-9281-0a056431aab1 | career_services    | 2026-06-21 04:15:07.684 |
+| Institution Administrator | c75b8b27-6d27-11f1-9281-0a056431aab1 | institution_admin  | NULL                    |
+| Support Admin             | ccf8883f-6d27-11f1-9281-0a056431aab1 | support_admin      | NULL                    |
+| Counsellor Admin          | ee126cee-6d27-11f1-9281-0a056431aab1 | counsellor_admin   | NULL                    |
+| Receiver Admin            | eebf21dc-6d27-11f1-9281-0a056431aab1 | receiver_admin     | NULL                    |
++---------------------------+--------------------------------------+--------------------+-------------------------+
+
+

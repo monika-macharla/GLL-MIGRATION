@@ -47,7 +47,7 @@ const [source, setSource] = useState<DBConfig>({
   port: 3306,
   username: 'gll_user',
   password: 'StrongPaSSW0rdGLL@2026',
-  database: 'gll_prod'
+  database: 'gll_prod_new'
 });
 
   const [dest, setDest] = useState<DBConfig>({
@@ -56,9 +56,9 @@ const [source, setSource] = useState<DBConfig>({
     port: 3306,
     username: 'gll_user',
     password: 'StrongPaSSW0rdGLL@2026',
-    // database: 'gllauthservice',
+    database: 'gllauthservice',
     // database: 'gllreports'
-    database: 'glldataingestion'
+    // database: 'glldataingestion'
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
