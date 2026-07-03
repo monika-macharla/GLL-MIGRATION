@@ -5,7 +5,6 @@ source db:                          destination db
 
 1. insert roles
 
-add missing columns in user_profile
 2. institution                         institutions,campuses(gllauthservicemigration)
 
 3. gl_user                             users(gllauthservicemigration)
@@ -115,7 +114,7 @@ cc_transcript_extended_info	                  import_edi_transcript_ext
 18	cc_transfer_credit_summary	             import_edi_institutions_attended
 
 19	cc_external_articulated_registration    import_edi_external_articulated_registration
-	                 
+GPISD Transcripts	                 
 
 Blockchain Mapping CSV Import
 ------------------------------------------------------------

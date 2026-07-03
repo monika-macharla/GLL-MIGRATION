@@ -26,6 +26,17 @@ class PreferencesMigrator(BaseMigrator):
     PREFERENCE_ITEM_TYPE = "auth.service.v1.PreferenceItem"
     EDUCATION_PREFERENCE_TYPE = "auth.service.v1.EducationPreference"
 
+    COMMUNICATION_PREFERENCE_MAPPING = {
+        "email": 1,
+        "e-mail": 1,
+        "mail": 1,
+        "text": 2,
+        "text_message": 2,
+        "text message": 2,
+        "sms": 2,
+        "mobile": 2,
+    }
+
     def __init__(
         self,
         engine,
@@ -358,9 +369,8 @@ class PreferencesMigrator(BaseMigrator):
                     "communication_preferences": self._json_column_value(
                         preferences_table,
                         "communication_preferences",
-                        self._build_preference_items(
-                            communication_names,
-                            "communication"
+                        self._build_communication_preferences(
+                            communication_names
                         )
                     ),
                     "major_preferences": self._json_column_value(
@@ -664,6 +674,56 @@ class PreferencesMigrator(BaseMigrator):
             )
 
         return items
+
+    def _build_communication_preferences(
+        self,
+        names
+    ):
+
+        preferences = []
+
+        for name in names:
+
+            clean_name = str(
+                name or ""
+            ).strip()
+
+            if not clean_name:
+
+                continue
+
+            normalized_name = self._normalize(
+                clean_name
+            ).replace(
+                "-",
+                "_"
+            )
+
+            if normalized_name == "all":
+
+                preferences = [
+                    1,
+                    2
+                ]
+
+                break
+
+            preference_value = (
+                self.COMMUNICATION_PREFERENCE_MAPPING.get(
+                    normalized_name
+                )
+            )
+
+            if (
+                preference_value is not None
+                and preference_value not in preferences
+            ):
+
+                preferences.append(
+                    preference_value
+                )
+
+        return preferences
 
     def _build_education_preferences(
         self,

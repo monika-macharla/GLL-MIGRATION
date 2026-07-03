@@ -30,6 +30,144 @@ class UserProfileMigrator(BaseMigrator):
         "prefer_not_to_say": 4,
     }
 
+    STATE_MAPPING = {
+        "AL": 1,
+        "ALABAMA": 1,
+        "AK": 2,
+        "ALASKA": 2,
+        "AS": 3,
+        "AMERICAN_SAMOA": 3,
+        "AMERICAN SAMOA": 3,
+        "AZ": 4,
+        "ARIZONA": 4,
+        "AR": 5,
+        "ARKANSAS": 5,
+        "CA": 6,
+        "CALIFORNIA": 6,
+        "CO": 7,
+        "COLORADO": 7,
+        "CT": 8,
+        "CONNECTICUT": 8,
+        "DE": 9,
+        "DELAWARE": 9,
+        "DC": 10,
+        "DISTRICT_OF_COLUMBIA": 10,
+        "DISTRICT OF COLUMBIA": 10,
+        "FM": 11,
+        "FEDERATED_STATES_OF_MICRONESIA": 11,
+        "FEDERATED STATES OF MICRONESIA": 11,
+        "FL": 12,
+        "FLORIDA": 12,
+        "GA": 13,
+        "GEORGIA": 13,
+        "GU": 14,
+        "GUAM": 14,
+        "HI": 15,
+        "HAWAII": 15,
+        "ID": 16,
+        "IDAHO": 16,
+        "IL": 17,
+        "ILLINOIS": 17,
+        "IN": 18,
+        "INDIANA": 18,
+        "IA": 19,
+        "IOWA": 19,
+        "KS": 20,
+        "KANSAS": 20,
+        "KY": 21,
+        "KENTUCKY": 21,
+        "LA": 22,
+        "LOUISIANA": 22,
+        "ME": 23,
+        "MAINE": 23,
+        "MH": 24,
+        "MARSHALL_ISLANDS": 24,
+        "MARSHALL ISLANDS": 24,
+        "MD": 25,
+        "MARYLAND": 25,
+        "MA": 26,
+        "MASSACHUSETTS": 26,
+        "MI": 27,
+        "MICHIGAN": 27,
+        "MN": 28,
+        "MINNESOTA": 28,
+        "MS": 29,
+        "MISSISSIPPI": 29,
+        "MO": 30,
+        "MISSOURI": 30,
+        "MT": 31,
+        "MONTANA": 31,
+        "NE": 32,
+        "NEBRASKA": 32,
+        "NV": 33,
+        "NEVADA": 33,
+        "NH": 34,
+        "NEW_HAMPSHIRE": 34,
+        "NEW HAMPSHIRE": 34,
+        "NJ": 35,
+        "NEW_JERSEY": 35,
+        "NEW JERSEY": 35,
+        "NM": 36,
+        "NEW_MEXICO": 36,
+        "NEW MEXICO": 36,
+        "NY": 37,
+        "NEW_YORK": 37,
+        "NEW YORK": 37,
+        "NC": 38,
+        "NORTH_CAROLINA": 38,
+        "NORTH CAROLINA": 38,
+        "ND": 39,
+        "NORTH_DAKOTA": 39,
+        "NORTH DAKOTA": 39,
+        "MP": 40,
+        "NORTHERN_MARIANA_ISLANDS": 40,
+        "NORTHERN MARIANA ISLANDS": 40,
+        "OH": 41,
+        "OHIO": 41,
+        "OK": 42,
+        "OKLAHOMA": 42,
+        "OR": 43,
+        "OREGON": 43,
+        "PW": 44,
+        "PALAU": 44,
+        "PA": 45,
+        "PENNSYLVANIA": 45,
+        "PR": 46,
+        "PUERTO_RICO": 46,
+        "PUERTO RICO": 46,
+        "RI": 47,
+        "RHODE_ISLAND": 47,
+        "RHODE ISLAND": 47,
+        "SC": 48,
+        "SOUTH_CAROLINA": 48,
+        "SOUTH CAROLINA": 48,
+        "SD": 49,
+        "SOUTH_DAKOTA": 49,
+        "SOUTH DAKOTA": 49,
+        "TN": 50,
+        "TENNESSEE": 50,
+        "TX": 51,
+        "TEXAS": 51,
+        "UT": 52,
+        "UTAH": 52,
+        "VT": 53,
+        "VERMONT": 53,
+        "VI": 54,
+        "VIRGIN_ISLANDS": 54,
+        "VIRGIN ISLANDS": 54,
+        "VA": 55,
+        "VIRGINIA": 55,
+        "WA": 56,
+        "WASHINGTON": 56,
+        "WV": 57,
+        "WEST_VIRGINIA": 57,
+        "WEST VIRGINIA": 57,
+        "WI": 58,
+        "WISCONSIN": 58,
+        "WY": 59,
+        "WYOMING": 59,
+    }
+
     def __init__(
         self,
         engine,
@@ -123,6 +261,37 @@ class UserProfileMigrator(BaseMigrator):
             return value
 
         return None
+
+
+    def _map_state(
+        self,
+        state
+    ):
+
+        if state is None:
+
+            return 0
+
+        state_key = (
+            str(state)
+            .strip()
+            .upper()
+        )
+
+        if not state_key:
+
+            return 0
+
+        return self.STATE_MAPPING.get(
+            state_key,
+            self.STATE_MAPPING.get(
+                state_key.replace(
+                    " ",
+                    "_"
+                ),
+                0
+            )
+        )
 
     def migrate(self) -> int:
 
@@ -1033,8 +1202,10 @@ class UserProfileMigrator(BaseMigrator):
                                 "city"
                             ),
 
-                            "state": address_data.get(
-                                "state"
+                            "state": self._map_state(
+                                address_data.get(
+                                    "state"
+                                )
                             ),
 
                             "zip_code": address_data.get(
@@ -1043,13 +1214,9 @@ class UserProfileMigrator(BaseMigrator):
 
                             "phone_number": phone_number,
 
-                            "country": address_data.get(
-                                "country_code"
-                            ),
+                            "country": 1,
 
-                            "country_code": address_data.get(
-                                "country_code"
-                            ),
+                            "country_code": 1,
 
                             "created_by": created_by_uuid,
 

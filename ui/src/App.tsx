@@ -56,7 +56,7 @@ const [source, setSource] = useState<DBConfig>({
     port: 3306,
     username: 'gll_user',
     password: 'StrongPaSSW0rdGLL@2026',
-    database: 'gllauthservice',
+    database: 'gllauthservicenew',
     // database: 'gllreports'
     // database: 'glldataingestion'
   });
