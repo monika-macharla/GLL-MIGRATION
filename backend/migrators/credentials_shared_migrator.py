@@ -64,6 +64,10 @@ class CredentialsSharedMigrator(BaseMigrator):
             "id_source": "share_link",
             "template": "highschoolshare/{id}/pdf_transcript",
         },
+        "grouped_share": {
+            "id_source": "share_link",
+            "template": "highschoolshare/{id}/pdf_transcript",
+        },
         "cc_transcript_shared": {
             "id_source": "share_link",
             "template": "communitycollegeshare/{id}/pdf_transcript",
@@ -139,6 +143,19 @@ class CredentialsSharedMigrator(BaseMigrator):
             "uuid_prefix": "transcript",
             "owner_columns": ["user_id"],
             "target_id_column": "credential_id",
+        },
+        {
+            "share_table": "grouped_share",
+            "credential_table": "hs_transcript",
+            "credential_type": 2,
+            "credential_id_columns": ["transcript_id"],
+            "credentials_all_link_column": "transcripts",
+            "uuid_prefix": "transcript",
+            "owner_columns": ["user_id"],
+            "target_id_column": "credential_id",
+            "linked_share_table": "hs_transcript_shared",
+            "linked_share_id_column": "share_id",
+            "linked_credential_id_column": "transcript_id",
         },
         {
             "share_table": "cc_transcript_shared",
@@ -363,6 +380,23 @@ class CredentialsSharedMigrator(BaseMigrator):
 
                 continue
 
+            linked_share_table_name = source_config.get(
+                "linked_share_table"
+            )
+
+            if (
+                linked_share_table_name
+                and
+                linked_share_table_name not in source_table_names
+            ):
+
+                logger.warning(
+                    f"Skipping {share_table_name}: missing linked share "
+                    f"table {linked_share_table_name}"
+                )
+
+                continue
+
             source_share_table = self._manual_reflect(
                 share_table_name,
                 self.source_engine,
@@ -492,6 +526,15 @@ class CredentialsSharedMigrator(BaseMigrator):
                                 "credential_id_columns"
                             ]
                         )
+
+                        if credential_source_id is None:
+
+                            credential_source_id = chunk_context.get(
+                                "linked_credential_ids_by_share_id",
+                                {}
+                            ).get(
+                                share_id
+                            )
                         credential_row = chunk_context[
                             "credential_rows"
                         ].get(
@@ -586,9 +629,17 @@ class CredentialsSharedMigrator(BaseMigrator):
                             chunk_context
                         )
 
+                        share_path_source_id = chunk_context.get(
+                            "linked_share_link_ids_by_share_id",
+                            {}
+                        ).get(
+                            share_id,
+                            source_share_link_id
+                        )
+
                         credential_path = self._share_credential_path(
                             source_config,
-                            source_share_link_id,
+                            share_path_source_id,
                             credential_source_id,
                             credentials_all_row
                         )
@@ -926,6 +977,72 @@ class CredentialsSharedMigrator(BaseMigrator):
             share_table.c.id,
             share_ids
         )
+
+        linked_credential_ids_by_share_id = {}
+        linked_share_link_ids_by_share_id = {}
+
+        linked_share_table_name = source_config.get(
+            "linked_share_table"
+        )
+
+        if linked_share_table_name and share_ids:
+
+            linked_share_table = self._manual_reflect(
+                linked_share_table_name,
+                self.source_engine,
+                self.metadata_source
+            )
+            linked_share_id_column = source_config[
+                "linked_share_id_column"
+            ]
+            linked_credential_id_column = source_config[
+                "linked_credential_id_column"
+            ]
+
+            with self.source_engine.connect() as conn:
+
+                linked_rows = conn.execute(
+                    select(
+                        linked_share_table
+                    ).where(
+                        linked_share_table.c[
+                            linked_share_id_column
+                        ].in_(
+                            list(share_ids)
+                        )
+                    )
+                ).fetchall()
+
+            for linked_row in linked_rows:
+
+                linked_row_dict = dict(
+                    linked_row._mapping
+                )
+                linked_share_id = linked_row_dict.get(
+                    linked_share_id_column
+                )
+                linked_credential_id = linked_row_dict.get(
+                    linked_credential_id_column
+                )
+                linked_share_link_id = linked_row_dict.get(
+                    "id"
+                )
+
+                if linked_share_id and linked_credential_id:
+
+                    linked_credential_ids_by_share_id[
+                        linked_share_id
+                    ] = linked_credential_id
+                    credential_ids.add(
+                        linked_credential_id
+                    )
+
+                if linked_share_id and linked_share_link_id:
+
+                    linked_share_link_ids_by_share_id[
+                        linked_share_id
+                    ] = linked_share_link_id
+
         credential_rows = self._fetch_lookup_by_ids(
             self.source_engine,
             credential_table,
@@ -1074,6 +1191,12 @@ class CredentialsSharedMigrator(BaseMigrator):
                 source_institution_to_destination_uuid
             ),
             "credentials_all_rows": credentials_all_rows,
+            "linked_credential_ids_by_share_id": (
+                linked_credential_ids_by_share_id
+            ),
+            "linked_share_link_ids_by_share_id": (
+                linked_share_link_ids_by_share_id
+            ),
         }
 
     def _fetch_lookup_by_ids(

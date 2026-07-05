@@ -685,6 +685,16 @@ class TranscriptExtMigrator(BaseMigrator):
 
                 return candidate
 
+        if isinstance(
+            parsed,
+            (dict, list)
+        ):
+
+            return json.dumps(
+                parsed,
+                separators=(",", ":")
+            )
+
         return parsed
 
     def _normalize(
