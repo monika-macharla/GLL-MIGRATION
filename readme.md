@@ -1,4 +1,9 @@
 1. gllauthservice:
+//migration data issues
+1. username "abigail" phone number and transcripts are incorrect
+2. user_profile date formt should be mm-dd-yyyy - fixed
+3. phone number is getting incorrect username "abigail"
+
 
 ```
 source db:                          destination db
@@ -15,7 +20,7 @@ update the user_role site_administrator uuid to issuing adminId
 
 gl_parent_student                       parent_student
 
-
+userprofile dob format is incorrect
 6. gl_user                              user_profile(gllauthservicemigration) 
 
 7. jhi_user                            user_hashed_password(gllauthservicemigration)
@@ -69,6 +74,8 @@ for gpisd chanhe the url to "users/greenlight/GPISD-PDF-Transcripts/signed/<stud
 19. badge_shared                         credentials_shared
 
 15. employment_history                employment
+
+
 
 
 

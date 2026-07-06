@@ -28,19 +28,15 @@ SET status = 2
 WHERE status = 1
   AND credential_type IN (1, 2, 3, 4, 5);
 
-ALTER TABLE credentials_transcripts
-ADD COLUMN _tmp_view_transcript_swap varchar(2048) NULL;
-
 UPDATE credentials_transcripts
-SET _tmp_view_transcript_swap = view_transcript,
-    view_transcript = credential_path,
-    credential_path = _tmp_view_transcript_swap
-WHERE credential_path IS NOT NULL
-  AND view_transcript IS NOT NULL
-  AND credential_path <> view_transcript;
-
-ALTER TABLE credentials_transcripts
-DROP COLUMN _tmp_view_transcript_swap;
+SET view_transcript = CONCAT(
+    LEFT(
+        view_transcript,
+        LENGTH(view_transcript) - LENGTH('/pdf_transcript_student')
+    ),
+    '/pdf_transcript'
+)
+WHERE view_transcript LIKE '%/pdf_transcript_student';
 
 UPDATE credentials_all ca
 JOIN credentials_transcripts ct

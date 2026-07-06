@@ -4,7 +4,7 @@ import re
 import uuid
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -981,16 +981,64 @@ class ImportStudentsMigrator(BaseMigrator):
 
             return None
 
-        if hasattr(
-            value,
-            "isoformat"
-        ):
+        if isinstance(value, (datetime, date)):
 
-            return value.isoformat()
+            return value.strftime(
+                "%m-%d-%Y"
+            )
 
-        return self._clean_string(
+        clean_value = self._clean_string(
             value
         )
+
+        if not clean_value:
+
+            return None
+
+        normalized_value = clean_value.replace(
+            "Z",
+            "+00:00"
+        )
+
+        try:
+
+            return datetime.fromisoformat(
+                normalized_value
+            ).strftime(
+                "%m-%d-%Y"
+            )
+
+        except ValueError:
+
+            pass
+
+        date_part = (
+            clean_value
+            .split("T", 1)[0]
+            .split(" ", 1)[0]
+        )
+
+        for date_format in (
+            "%Y-%m-%d",
+            "%m-%d-%Y",
+            "%m/%d/%Y",
+            "%Y/%m/%d"
+        ):
+
+            try:
+
+                return datetime.strptime(
+                    date_part,
+                    date_format
+                ).strftime(
+                    "%m-%d-%Y"
+                )
+
+            except ValueError:
+
+                continue
+
+        return clean_value
 
     def _bit_to_int(
         self,

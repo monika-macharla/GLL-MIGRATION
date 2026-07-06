@@ -994,7 +994,9 @@ class TranscriptMigrator(BaseMigrator):
                             source_transcript_id
                         )
 
-                    view_transcript = credential_path
+                    view_transcript = self._legacy_view_transcript_path(
+                        source_transcript_id
+                    )
 
                     if (
                         credential_path in existing_credential_paths
@@ -1869,7 +1871,19 @@ class TranscriptMigrator(BaseMigrator):
 
         return (
             f"{self.UPLOADS_PREFIX}/"
-            f"shared/"
+            f"transcripts/"
+            f"{source_transcript_id}/"
+            f"pdf_transcript_student"
+        )
+
+    def _legacy_view_transcript_path(
+        self,
+        source_transcript_id
+    ):
+
+        return (
+            f"{self.UPLOADS_PREFIX}/"
+            f"transcripts/"
             f"{source_transcript_id}/"
             f"pdf_transcript"
         )

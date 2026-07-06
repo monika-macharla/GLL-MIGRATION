@@ -1,11 +1,12 @@
 import uuid
 import logging
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     select,
-    insert
+    insert,
+    update
 )
 
 from .base_migrator import BaseMigrator
@@ -219,6 +220,82 @@ class UserProfileMigrator(BaseMigrator):
 
         return value
 
+    def _format_dob(
+        self,
+        value,
+        fallback=None
+    ):
+
+        clean_value = self._clean_datetime(
+            value,
+            fallback
+        )
+
+        if clean_value is None:
+
+            return fallback
+
+        if isinstance(clean_value, (datetime, date)):
+
+            return clean_value.strftime(
+                "%m-%d-%Y"
+            )
+
+        if isinstance(clean_value, str):
+
+            clean_value = clean_value.strip()
+
+            if not clean_value:
+
+                return fallback
+
+            normalized_value = clean_value.replace(
+                "Z",
+                "+00:00"
+            )
+
+            try:
+
+                return datetime.fromisoformat(
+                    normalized_value
+                ).strftime(
+                    "%m-%d-%Y"
+                )
+
+            except ValueError:
+
+                pass
+
+            date_part = (
+                clean_value
+                .split("T", 1)[0]
+                .split(" ", 1)[0]
+            )
+
+            for date_format in (
+                "%Y-%m-%d",
+                "%m-%d-%Y",
+                "%m/%d/%Y",
+                "%Y/%m/%d"
+            ):
+
+                try:
+
+                    return datetime.strptime(
+                        date_part,
+                        date_format
+                    ).strftime(
+                        "%m-%d-%Y"
+                    )
+
+                except ValueError:
+
+                    continue
+
+            return clean_value
+
+        return str(clean_value)
+
     def _map_bool(
         self,
         value
@@ -391,6 +468,7 @@ class UserProfileMigrator(BaseMigrator):
         )
 
         migrated_count = 0
+        total_updated_existing_profiles = 0
         batch_number = 0
         migrated_user_uuids = set()
 
@@ -864,6 +942,7 @@ class UserProfileMigrator(BaseMigrator):
                         }
 
                 insert_data = []
+                existing_profile_updates = []
                 prepared_user_uuids = set()
                 skipped_users = 0
                 skipped_existing_profiles = 0
@@ -894,21 +973,6 @@ class UserProfileMigrator(BaseMigrator):
                         if not user_uuid:
 
                             skipped_users += 1
-
-                            continue
-
-                        if user_uuid in existing_profile_user_uuids:
-
-                            skipped_existing_profiles += 1
-
-                            continue
-
-                        if (
-                            user_uuid in migrated_user_uuids
-                            or user_uuid in prepared_user_uuids
-                        ):
-
-                            skipped_duplicate_profiles += 1
 
                             continue
 
@@ -1102,7 +1166,7 @@ class UserProfileMigrator(BaseMigrator):
                             )
                         )
 
-                        dob = self._clean_datetime(
+                        dob = self._format_dob(
                             self._first_value(
                                 student_data.get(
                                     gl_student_table.c.date_of_birth
@@ -1153,16 +1217,53 @@ class UserProfileMigrator(BaseMigrator):
                         )
 
                         phone_number = self._first_value(
+                            row_dict.get(
+                                source_table.c.phone_no
+                            ),
                             student_data.get(
                                 gl_student_table.c.phone_no
                             ),
                             parent_data.get(
                                 gl_parent_table.c.phone_number
-                            ),
-                            row_dict.get(
-                                source_table.c.phone_no
                             )
                         )
+
+                        if user_uuid in existing_profile_user_uuids:
+
+                            existing_profile_update = {
+                                "user_uuid": user_uuid
+                            }
+
+                            if dob is not None:
+
+                                existing_profile_update[
+                                    "dob"
+                                ] = dob
+
+                            if phone_number is not None:
+
+                                existing_profile_update[
+                                    "phone_number"
+                                ] = phone_number
+
+                            if len(existing_profile_update) > 1:
+
+                                existing_profile_updates.append(
+                                    existing_profile_update
+                                )
+
+                            skipped_existing_profiles += 1
+
+                            continue
+
+                        if (
+                            user_uuid in migrated_user_uuids
+                            or user_uuid in prepared_user_uuids
+                        ):
+
+                            skipped_duplicate_profiles += 1
+
+                            continue
 
                         insert_data.append({
 
@@ -1280,6 +1381,8 @@ class UserProfileMigrator(BaseMigrator):
                         f"skipped_users={skipped_users}, "
                         f"skipped_existing_profiles="
                         f"{skipped_existing_profiles}, "
+                        f"updated_existing_profiles="
+                        f"{len(existing_profile_updates)}, "
                         f"skipped_duplicate_profiles="
                         f"{skipped_duplicate_profiles}, "
                         f"student_details={student_profiles_sourced}, "
@@ -1302,13 +1405,62 @@ class UserProfileMigrator(BaseMigrator):
                             insert_data
                         )
 
+                        for existing_profile_update in existing_profile_updates:
+
+                            dest_conn.execute(
+                                update(user_profile_table)
+                                .where(
+                                    user_profile_table.c.user_uuid
+                                    == existing_profile_update[
+                                        "user_uuid"
+                                    ]
+                                )
+                                .values({
+                                    key: value
+                                    for key, value
+                                    in existing_profile_update.items()
+                                    if key != "user_uuid"
+                                })
+                            )
+
                     migrated_count += len(insert_data)
+                    total_updated_existing_profiles += len(
+                        existing_profile_updates
+                    )
 
                     migrated_user_uuids.update(
                         prepared_user_uuids
                     )
 
                 else:
+
+                    if existing_profile_updates:
+
+                        with self.dest_engine.begin() as dest_conn:
+
+                            for existing_profile_update in (
+                                existing_profile_updates
+                            ):
+
+                                dest_conn.execute(
+                                    update(user_profile_table)
+                                    .where(
+                                        user_profile_table.c.user_uuid
+                                        == existing_profile_update[
+                                            "user_uuid"
+                                        ]
+                                    )
+                                    .values({
+                                        key: value
+                                        for key, value
+                                        in existing_profile_update.items()
+                                        if key != "user_uuid"
+                                    })
+                                )
+
+                        total_updated_existing_profiles += len(
+                            existing_profile_updates
+                        )
 
                     logger.warning(
                         f"User profile chunk id "
@@ -1317,6 +1469,8 @@ class UserProfileMigrator(BaseMigrator):
                         f"skipped_users={skipped_users}, "
                         f"skipped_existing_profiles="
                         f"{skipped_existing_profiles}, "
+                        f"updated_existing_profiles="
+                        f"{len(existing_profile_updates)}, "
                         f"skipped_duplicate_profiles="
                         f"{skipped_duplicate_profiles}, "
                         f"errors={row_errors}."
@@ -1332,7 +1486,8 @@ class UserProfileMigrator(BaseMigrator):
 
         logger.info(
             f"Successfully migrated "
-            f"{migrated_count} user profiles."
+            f"{migrated_count} user profiles and updated "
+            f"{total_updated_existing_profiles} existing profiles."
         )
 
         logger.info(
