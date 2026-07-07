@@ -318,25 +318,31 @@ class TranscriptMigrator(BaseMigrator):
                         "student_id"
                     )
 
+                    source_gl_user_id = self._get_source_value(
+                        row_dict,
+                        transcript_table,
+                        "user_id"
+                    )
+
                     source_gl_student = chunk_context[
                         "students"
                     ].get(
                         source_student_id
                     )
 
-                    source_gl_user_id = (
-                        self._get_source_value(
-                            row_dict,
-                            transcript_table,
+                    if not source_gl_student and source_gl_user_id:
+
+                        source_gl_student = chunk_context[
+                            "students_by_user_id"
+                        ].get(
+                            source_gl_user_id
+                        )
+
+                    if not source_gl_user_id and source_gl_student:
+
+                        source_gl_user_id = source_gl_student.get(
                             "user_id"
                         )
-                        or
-                        (
-                            source_gl_student.get("user_id")
-                            if source_gl_student
-                            else None
-                        )
-                    )
 
                     source_gl_user = chunk_context[
                         "users"
@@ -495,6 +501,18 @@ class TranscriptMigrator(BaseMigrator):
                     )
 
                     created_at = (
+                        self._get_source_value(
+                            row_dict,
+                            transcript_table,
+                            "issued_on"
+                        )
+                        or
+                        self._get_source_value(
+                            row_dict,
+                            transcript_table,
+                            "created_date"
+                        )
+                        or
                         self._get_source_value(
                             row_dict,
                             transcript_table,
@@ -861,25 +879,31 @@ class TranscriptMigrator(BaseMigrator):
                         "student_id"
                     )
 
+                    source_gl_user_id = self._get_source_value(
+                        row_dict,
+                        legacy_transcript_table,
+                        "user_id"
+                    )
+
                     source_gl_student = chunk_context[
                         "students"
                     ].get(
                         source_student_id
                     )
 
-                    source_gl_user_id = (
-                        self._get_source_value(
-                            row_dict,
-                            legacy_transcript_table,
+                    if not source_gl_student and source_gl_user_id:
+
+                        source_gl_student = chunk_context[
+                            "students_by_user_id"
+                        ].get(
+                            source_gl_user_id
+                        )
+
+                    if not source_gl_user_id and source_gl_student:
+
+                        source_gl_user_id = source_gl_student.get(
                             "user_id"
                         )
-                        or
-                        (
-                            source_gl_student.get("user_id")
-                            if source_gl_student
-                            else None
-                        )
-                    )
 
                     source_gl_user = chunk_context[
                         "users"
@@ -1326,6 +1350,13 @@ class TranscriptMigrator(BaseMigrator):
                     student_user_id
                 )
 
+        students_by_user_id = self._fetch_lookup_by_ids(
+            self.source_engine,
+            source_student_table,
+            source_student_table.c.user_id,
+            user_ids
+        )
+
         users = self._fetch_lookup_by_ids(
             self.source_engine,
             source_user_table,
@@ -1374,6 +1405,7 @@ class TranscriptMigrator(BaseMigrator):
 
         return {
             "students": students,
+            "students_by_user_id": students_by_user_id,
             "users": users,
             "enrollments_by_id": enrollments_by_id,
             "enrollments_by_student_id": enrollments_by_student_id,
