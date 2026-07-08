@@ -77,6 +77,12 @@ class ImportStudentsMigrator(BaseMigrator):
             self.metadata_source
         )
 
+        enrollment_table = self._manual_reflect(
+            "enrollment",
+            self.source_engine,
+            self.metadata_source
+        )
+
         destination_table = self._manual_reflect(
             self.DESTINATION_TABLE,
             self.dest_engine,
@@ -142,7 +148,8 @@ class ImportStudentsMigrator(BaseMigrator):
                 select(
                     source_table,
                     address_table,
-                    state_table
+                    state_table,
+                    enrollment_table.c.enrollment_UUID
                 )
                 .select_from(
                     source_table
@@ -155,6 +162,11 @@ class ImportStudentsMigrator(BaseMigrator):
                         state_table,
                         address_table.c.state
                         == state_table.c.id
+                    )
+                    .outerjoin(
+                        enrollment_table,
+                        source_table.c.id
+                        == enrollment_table.c.student_id
                     )
                 )
                 .where(
@@ -363,8 +375,14 @@ class ImportStudentsMigrator(BaseMigrator):
                             source_table.c.currently_enrolled
                         )
                     ),
-                    "enrollment_id": self._enrollment_uuid(
-                        source_id
+                    "enrollment_id": (
+                        row_dict.get(
+                            enrollment_table.c.enrollment_UUID
+                        )
+                        or
+                        self._enrollment_uuid(
+                            source_id
+                        )
                     ),
                     "is_registered": 1 if row_dict.get(
                         source_table.c.user_id

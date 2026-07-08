@@ -498,8 +498,10 @@ class UserEnrollmentMigrator(BaseMigrator):
                         )
 
                         insert_data.append({
-                            "uuid": str(
-                                uuid.uuid4()
+                            "uuid": (
+                                enrollment_code
+                                if enrollment_code
+                                else str(uuid.uuid4())
                             ),
                             "created_at": current_time,
                             "updated_at": current_time,
