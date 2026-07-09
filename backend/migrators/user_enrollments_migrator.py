@@ -262,7 +262,9 @@ class UserEnrollmentMigrator(BaseMigrator):
                     select(
                         source_enrollment_table,
                         source_gl_student_table.c.school_student_id,
-                        source_gl_user_table.c.username
+                        source_gl_user_table.c.username,
+                        source_gl_user_table.c.created_date,
+                        source_gl_user_table.c.last_change_date
                     )
                     .select_from(
                         source_enrollment_table
@@ -486,7 +488,18 @@ class UserEnrollmentMigrator(BaseMigrator):
 
                             continue
 
-                        current_time = datetime.utcnow()
+                        created_date = row_dict.get(
+                            source_gl_user_table.c.created_date
+                        )
+                        last_change_date = row_dict.get(
+                            source_gl_user_table.c.last_change_date
+                        )
+
+                        if not created_date:
+                            created_date = last_change_date or datetime.utcnow()
+
+                        if not last_change_date:
+                            last_change_date = created_date
 
                         student_number = (
                             row_dict.get(
@@ -503,8 +516,8 @@ class UserEnrollmentMigrator(BaseMigrator):
                                 if enrollment_code
                                 else str(uuid.uuid4())
                             ),
-                            "created_at": current_time,
-                            "updated_at": current_time,
+                            "created_at": created_date,
+                            "updated_at": last_change_date,
                             "deleted_at": None,
                             "enrollment_code": enrollment_code,
                             "student_number": student_number,
