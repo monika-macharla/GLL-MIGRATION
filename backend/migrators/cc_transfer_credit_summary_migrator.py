@@ -399,6 +399,14 @@ class CCTransferCreditSummaryMigrator(BaseMigrator):
                 self.source_engine,
                 self.metadata_source
             )
+            
+            if ext_table is None or transcript_table is None:
+                logger.warning("Could not reflect transcript_ext or transcript. Skipping Phase 2.")
+                return 0
+                
+            if not hasattr(ext_table.c, "inst_attend"):
+                logger.warning("Column 'inst_attend' does not exist in 'transcript_ext'. Skipping Phase 2.")
+                return 0
         except Exception as e:
             logger.warning(f"Could not load transcript_ext tables: {e}")
             return 0
@@ -421,14 +429,13 @@ class CCTransferCreditSummaryMigrator(BaseMigrator):
                     ext_table.c.id,
                     ext_table.c.inst_attend,
                     transcript_table.c.stu_identification,
-                    credential_table.c.institution_id,
+                    transcript_table.c.institution_id,
                     institution_table.c.name
                 )
                 .select_from(
                     ext_table
                     .join(transcript_table, ext_table.c.transcript_id == transcript_table.c.id)
-                    .join(credential_table, transcript_table.c.credential_id == credential_table.c.id)
-                    .join(institution_table, credential_table.c.institution_id == institution_table.c.id, isouter=True)
+                    .join(institution_table, transcript_table.c.institution_id == institution_table.c.id, isouter=True)
                 )
                 .where(ext_table.c.id > last_source_id)
                 .where(ext_table.c.inst_attend.isnot(None))
@@ -461,7 +468,7 @@ class CCTransferCreditSummaryMigrator(BaseMigrator):
                 if not student_number:
                     continue
 
-                source_institution_id = row_dict.get(credential_table.c.institution_id)
+                source_institution_id = row_dict.get(transcript_table.c.institution_id)
                 institution_name = self._clean_string(row_dict.get(institution_table.c.name))
                 destination_institution_uuid = (
                     destination_institution_lookup.get(self._normalize(institution_name)) if institution_name else None
