@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 class CCTranscriptExtGpaMigrator(BaseMigrator):
 
-    SOURCE_TABLE = "cc_transcript_extended_info"
-    SOURCE_TABLE_ALIAS = "cc_transcript_ext"
+    SOURCE_TABLE = "transcript"
+    SOURCE_TABLE_ALIAS = "transcript"
     DESTINATION_TABLE = "import_edi_gpa"
     DEFAULT_AUTH_DATABASE = "gllauthserviceuatmigration"
     IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
@@ -50,18 +50,6 @@ class CCTranscriptExtGpaMigrator(BaseMigrator):
 
         source_table = self._manual_reflect(
             source_table_name,
-            self.source_engine,
-            self.metadata_source
-        )
-
-        cc_transcript_table = self._manual_reflect(
-            "cc_transcript",
-            self.source_engine,
-            self.metadata_source
-        )
-
-        credential_table = self._manual_reflect(
-            "credential",
             self.source_engine,
             self.metadata_source
         )
@@ -132,42 +120,41 @@ class CCTranscriptExtGpaMigrator(BaseMigrator):
                     remaining_limit
                 )
 
+            t2 = source_table.alias('t2')
+            subquery = (
+                select(func.max(t2.c.id))
+                .where(t2.c.stu_identification == source_table.c.stu_identification)
+                .where(t2.c.institution_id == source_table.c.institution_id)
+                .correlate(source_table)
+            )
+
             query = (
                 select(
                     source_table.c.id,
-                    source_table.c.transcript_id,
-                    source_table.c.gpa1,
-                    source_table.c.custom_gpa1,
-                    source_table.c.custom_gpa2,
-                    source_table.c.gpa1_hours_attempted,
-                    source_table.c.gpa2_hours_attempted,
-                    source_table.c.gpa1_hours_earned,
-                    source_table.c.gpa2_hours_earned,
-                    source_table.c.gpa1_earned_grade_points,
-                    source_table.c.gpa2_earned_grade_points,
-                    credential_table.c.stu_identification,
-                    credential_table.c.institution_id,
+                    source_table.c.stu_identification,
+                    source_table.c.institution_id,
+                    source_table.c.cgpa_gpa1,
+                    source_table.c.cgpa_gpa2,
+                    source_table.c.hrs_attempted_gpa1,
+                    source_table.c.hrs_attempted_gpa2,
+                    source_table.c.hrs_earned_gpa1,
+                    source_table.c.hrs_earned_gpa2,
+                    source_table.c.hrs_points_gpa1,
+                    source_table.c.hrs_points_gpa2,
+                    source_table.c.overall_hrs_earned,
+                    source_table.c.status_info,
                     institution_table.c.name
                 )
                 .select_from(
                     source_table
                     .join(
-                        cc_transcript_table,
-                        source_table.c.transcript_id
-                        == cc_transcript_table.c.id
-                    )
-                    .join(
-                        credential_table,
-                        cc_transcript_table.c.credential_id
-                        == credential_table.c.id
-                    )
-                    .join(
                         institution_table,
-                        credential_table.c.institution_id
+                        source_table.c.institution_id
                         == institution_table.c.id,
                         isouter=True
                     )
                 )
+                .where(source_table.c.id == subquery)
                 .where(
                     source_table.c.id > last_source_id
                 )
@@ -213,17 +200,17 @@ class CCTranscriptExtGpaMigrator(BaseMigrator):
 
                 student_number = self._clean_string(
                     row_dict.get(
-                        credential_table.c.stu_identification
+                        source_table.c.stu_identification
                     )
                 )
 
                 if not student_number:
 
                     missing_student_number += 1
-                    student_number = f"CC-TRANSCRIPT-{row_dict.get(source_table.c.transcript_id)}"
+                    student_number = f"TRANSCRIPT-{source_id}"
 
                 source_institution_id = row_dict.get(
-                    credential_table.c.institution_id
+                    source_table.c.institution_id
                 )
 
                 if not source_institution_id:
@@ -245,11 +232,6 @@ class CCTranscriptExtGpaMigrator(BaseMigrator):
                     else
                     None
                 )
-
-                # Prioritize custom_gpa1 over gpa1 if custom_gpa1 is available
-                cgpa_gpa1_raw = row_dict.get(source_table.c.custom_gpa1)
-                if not cgpa_gpa1_raw:
-                    cgpa_gpa1_raw = row_dict.get(source_table.c.gpa1)
 
                 mapped_row = {
                     "uuid": self._stable_uuid(
@@ -274,55 +256,64 @@ class CCTranscriptExtGpaMigrator(BaseMigrator):
                             None
                         )
                     ),
-                    "cgpa_gpa1": self._float_value(cgpa_gpa1_raw),
+                    "cgpa_gpa1": self._float_value(
+                        row_dict.get(
+                            source_table.c.cgpa_gpa1
+                        )
+                    ),
                     "cgpa_gpa2": self._float_value(
                         row_dict.get(
-                            source_table.c.custom_gpa2
+                            source_table.c.cgpa_gpa2
                         )
                     ),
                     "hrs_attempted_gpa1": self._truncate(
                         row_dict.get(
-                            source_table.c.gpa1_hours_attempted
+                            source_table.c.hrs_attempted_gpa1
                         ),
                         45
                     ),
                     "hrs_attempted_gpa2": self._truncate(
                         row_dict.get(
-                            source_table.c.gpa2_hours_attempted
+                            source_table.c.hrs_attempted_gpa2
                         ),
                         45
                     ),
                     "hrs_earned_gpa1": self._truncate(
                         row_dict.get(
-                            source_table.c.gpa1_hours_earned
+                            source_table.c.hrs_earned_gpa1
                         ),
                         45
                     ),
                     "hrs_earned_gpa2": self._truncate(
                         row_dict.get(
-                            source_table.c.gpa2_hours_earned
+                            source_table.c.hrs_earned_gpa2
                         ),
                         45
                     ),
                     "hrs_points_gpa1": self._truncate(
                         row_dict.get(
-                            source_table.c.gpa1_earned_grade_points
+                            source_table.c.hrs_points_gpa1
                         ),
                         45
                     ),
                     "hrs_points_gpa2": self._truncate(
                         row_dict.get(
-                            source_table.c.gpa2_earned_grade_points
+                            source_table.c.hrs_points_gpa2
                         ),
                         45
                     ),
                     "over_all_hrs_earned": self._truncate(
                         row_dict.get(
-                            source_table.c.gpa1_hours_earned
+                            source_table.c.overall_hrs_earned
                         ),
                         45
                     ),
-                    "status_info": None,
+                    "status_info": self._truncate(
+                        row_dict.get(
+                            source_table.c.status_info
+                        ),
+                        255
+                    ),
                     "import_file_uuid": None,
                 }
 
