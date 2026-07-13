@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import uuid
@@ -376,6 +377,130 @@ class CCTransferCreditSummaryMigrator(BaseMigrator):
             f"invalid_exit_date={invalid_exit_date}"
         )
 
+        inserted_count += self._migrate_extended_info_institutions(
+            cc_transcript_table, credential_table, institution_table, destination_table, destination_institution_lookup, batch_size, remaining_limit
+        )
+
+        return inserted_count
+
+    def _migrate_extended_info_institutions(
+        self, cc_transcript_table, credential_table, institution_table, destination_table, destination_institution_lookup, batch_size, remaining_limit
+    ):
+        logger.info("Starting Phase 2: Migrating from cc_transcript_extended_info.inst_attend...")
+        
+        ext_table = self._manual_reflect(
+            "cc_transcript_extended_info",
+            self.source_engine,
+            self.metadata_source
+        )
+
+        last_source_id = 0
+        fetched_count = 0
+        prepared_count = 0
+        inserted_count = 0
+        batch_number = 0
+
+        while True:
+            fetch_size = batch_size
+            if remaining_limit is not None:
+                if remaining_limit <= 0:
+                    break
+                fetch_size = min(fetch_size, remaining_limit)
+
+            query = (
+                select(
+                    ext_table.c.id,
+                    ext_table.c.inst_attend,
+                    cc_transcript_table.c.stu_identification,
+                    credential_table.c.institution_id,
+                    institution_table.c.name
+                )
+                .select_from(
+                    ext_table
+                    .join(cc_transcript_table, ext_table.c.transcript_id == cc_transcript_table.c.id)
+                    .join(credential_table, cc_transcript_table.c.credential_id == credential_table.c.id)
+                    .join(institution_table, credential_table.c.institution_id == institution_table.c.id, isouter=True)
+                )
+                .where(ext_table.c.id > last_source_id)
+                .where(ext_table.c.inst_attend.isnot(None))
+                .where(ext_table.c.inst_attend != '[]')
+                .where(ext_table.c.inst_attend != '')
+                .order_by(ext_table.c.id)
+                .limit(fetch_size)
+            )
+
+            with self.source_engine.connect() as source_conn:
+                rows = source_conn.execute(query).fetchall()
+
+            if not rows:
+                break
+
+            fetched_count += len(rows)
+            if remaining_limit is not None:
+                remaining_limit -= len(rows)
+
+            insert_data = []
+            batch_number += 1
+            now = datetime.utcnow()
+
+            for row in rows:
+                row_dict = row._mapping
+                source_id = row_dict.get(ext_table.c.id)
+                last_source_id = source_id
+
+                student_number = self._clean_string(row_dict.get(cc_transcript_table.c.stu_identification))
+                if not student_number:
+                    continue
+
+                source_institution_id = row_dict.get(credential_table.c.institution_id)
+                institution_name = self._clean_string(row_dict.get(institution_table.c.name))
+                destination_institution_uuid = (
+                    destination_institution_lookup.get(self._normalize(institution_name)) if institution_name else None
+                )
+
+                inst_attend_raw = row_dict.get(ext_table.c.inst_attend)
+                try:
+                    inst_list = json.loads(inst_attend_raw) if inst_attend_raw else []
+                except Exception:
+                    inst_list = []
+
+                if not isinstance(inst_list, list):
+                    continue
+
+                for idx, inst_str in enumerate(inst_list):
+                    clean_inst = self._clean_string(inst_str)
+                    if not clean_inst:
+                        continue
+
+                    mapped_row = {
+                        "uuid": self._stable_uuid(f"ext_{source_id}_{idx}"),
+                        "created_at": now,
+                        "updated_at": now,
+                        "deleted_at": None,
+                        "student_number": self._truncate(student_number, 255),
+                        "institution_id": (
+                            destination_institution_uuid or 
+                            (self._institution_uuid(source_institution_id) if source_institution_id else None)
+                        ),
+                        "institution_name": self._truncate(clean_inst, 255),
+                        "start_date": None,
+                        "exit_date": None,
+                        "credits_awarded": None,
+                        "import_file_uuid": None,
+                    }
+                    insert_data.append(self._filter_to_table_columns(mapped_row, destination_table))
+
+            if insert_data:
+                prepared_count += len(insert_data)
+                statement = mysql_insert(destination_table).prefix_with("IGNORE")
+                with self.dest_engine.begin() as dest_conn:
+                    result = dest_conn.execute(statement, insert_data)
+                inserted_count += result.rowcount or 0
+
+            if len(rows) < fetch_size:
+                break
+
+        logger.info(f"Phase 2 Summary: fetched={fetched_count}, prepared={prepared_count}, inserted={inserted_count}")
         return inserted_count
 
     def _count_rows(
