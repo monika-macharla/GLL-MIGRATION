@@ -475,6 +475,8 @@ async def migrate(request: MigrationRequest):
 
                 "cc_term",
 
+                "semester",
+
                 "cc_external_articulated_registration",
 
                 "cc_transfer_credit_summary",

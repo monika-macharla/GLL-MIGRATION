@@ -14,13 +14,16 @@ logger = logging.getLogger(__name__)
 
 class CCTermMigrator(BaseMigrator):
 
-    SOURCE_TABLE = "cc_term"
+    SOURCE_TABLE = "semester"
     DESTINATION_TABLE = "import_edi_semester"
     DESTINATION_TABLE_ALIAS = "import_edi_semesters"
-    DEFAULT_AUTH_DATABASE = "gllauthserviceuatmigration"
+    DEFAULT_AUTH_DATABASE = "gllauthservicenew"
     IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
     DEFAULT_BATCH_SIZE = 5000
     MAX_BATCH_SIZE = 10000
+    # Regex to strip parenthesized date portions from term
+    # e.g. "FALL 2019 (08/26/2019-12/13/2019)" -> "FALL 2019"
+    PAREN_STRIP_RE = re.compile(r"\(.*?\)")
 
     def __init__(
         self,
@@ -43,7 +46,8 @@ class CCTermMigrator(BaseMigrator):
     def migrate(self) -> int:
 
         logger.info(
-            "Starting CC Term Import Migration..."
+            "Starting Semester Import Migration "
+            "(semester -> import_edi_semester)..."
         )
 
         destination_table_name = self._resolve_table_name(
@@ -52,26 +56,20 @@ class CCTermMigrator(BaseMigrator):
             self.DESTINATION_TABLE_ALIAS
         )
 
+        # -----------------------------------------
+        # Reflect source tables:
+        #   semester (gll_prod_new.semester)
+        #   transcript (gll_prod_new.transcript)
+        # -----------------------------------------
+
         source_table = self._manual_reflect(
             self.SOURCE_TABLE,
             self.source_engine,
             self.metadata_source
         )
 
-        cc_transcript_table = self._manual_reflect(
-            "cc_transcript",
-            self.source_engine,
-            self.metadata_source
-        )
-
-        credential_table = self._manual_reflect(
-            "credential",
-            self.source_engine,
-            self.metadata_source
-        )
-
-        institution_table = self._manual_reflect(
-            "institution",
+        transcript_table = self._manual_reflect(
+            "transcript",
             self.source_engine,
             self.metadata_source
         )
@@ -82,8 +80,14 @@ class CCTermMigrator(BaseMigrator):
             self.metadata_dest
         )
 
-        destination_institution_lookup = (
-            self._load_destination_institution_lookup()
+        # -----------------------------------------
+        # Load institution ID -> UUID lookup
+        # Maps Java integer institution_id to the
+        # TypeScript UUID from auth service
+        # -----------------------------------------
+
+        institution_id_to_uuid = (
+            self._load_institution_id_to_uuid_lookup()
         )
 
         source_count = self._count_rows(
@@ -96,7 +100,7 @@ class CCTermMigrator(BaseMigrator):
         )
 
         logger.info(
-            f"Source cc_term count: {source_count}"
+            f"Source semester count: {source_count}"
         )
         logger.info(
             f"Destination {destination_table_name} current count: "
@@ -121,7 +125,32 @@ class CCTermMigrator(BaseMigrator):
         missing_institution_id = 0
         invalid_start_date = 0
         invalid_end_date = 0
+        skipped_not_latest_transcript = 0
         batch_number = 0
+
+        # -----------------------------------------
+        # Pre-compute latest transcript ID per
+        # (stu_identification, institution_id)
+        # to avoid duplicate rows from multiple
+        # transcript records per student.
+        # Equivalent to:
+        #   WHERE t.id = (
+        #     SELECT MAX(t2.id)
+        #     FROM transcript t2
+        #     WHERE t2.stu_identification = t.stu_identification
+        #       AND t2.institution_id = t.institution_id
+        #   )
+        # -----------------------------------------
+
+        latest_transcript_ids = (
+            self._load_latest_transcript_ids(transcript_table)
+        )
+
+        logger.info(
+            f"Pre-computed latest transcript IDs for "
+            f"{len(latest_transcript_ids)} "
+            f"(student, institution) pairs"
+        )
 
         while True:
 
@@ -138,6 +167,11 @@ class CCTermMigrator(BaseMigrator):
                     remaining_limit
                 )
 
+            # -----------------------------------------
+            # Query: semester JOIN transcript
+            # ON transcript.id = semester.transcript_id
+            # -----------------------------------------
+
             query = (
                 select(
                     source_table.c.id,
@@ -145,30 +179,18 @@ class CCTermMigrator(BaseMigrator):
                     source_table.c.term,
                     source_table.c.start_date,
                     source_table.c.end_date,
-                    source_table.c.earned_hours,
+                    source_table.c.credit_hrs,
                     source_table.c.gpa,
                     source_table.c.year,
-                    credential_table.c.stu_identification,
-                    credential_table.c.institution_id,
-                    institution_table.c.name
+                    transcript_table.c.stu_identification,
+                    transcript_table.c.institution_id,
                 )
                 .select_from(
                     source_table
                     .join(
-                        cc_transcript_table,
-                        source_table.c.transcript_id
-                        == cc_transcript_table.c.id
-                    )
-                    .join(
-                        credential_table,
-                        cc_transcript_table.c.credential_id
-                        == credential_table.c.id
-                    )
-                    .join(
-                        institution_table,
-                        credential_table.c.institution_id
-                        == institution_table.c.id,
-                        isouter=True
+                        transcript_table,
+                        transcript_table.c.id
+                        == source_table.c.transcript_id
                     )
                 )
                 .where(
@@ -214,40 +236,76 @@ class CCTermMigrator(BaseMigrator):
                 )
                 last_source_id = source_id
 
+                transcript_id = row_dict.get(
+                    source_table.c.transcript_id
+                )
+
                 student_number = self._clean_string(
                     row_dict.get(
-                        credential_table.c.stu_identification
+                        transcript_table.c.stu_identification
                     )
                 )
+
+                source_institution_id = row_dict.get(
+                    transcript_table.c.institution_id
+                )
+
+                # -----------------------------------------
+                # Deduplication: skip if this transcript
+                # is NOT the latest one for this student
+                # at this institution.
+                # -----------------------------------------
+
+                dedup_key = (
+                    str(student_number or ""),
+                    source_institution_id
+                )
+
+                latest_tid = latest_transcript_ids.get(
+                    dedup_key
+                )
+
+                if (
+                    latest_tid is not None
+                    and transcript_id != latest_tid
+                ):
+
+                    skipped_not_latest_transcript += 1
+                    continue
 
                 if not student_number:
 
                     missing_student_number += 1
-                    student_number = f"CC-TRANSCRIPT-{row_dict.get(source_table.c.transcript_id)}"
-
-                source_institution_id = row_dict.get(
-                    credential_table.c.institution_id
-                )
-
-                if not source_institution_id:
-
-                    missing_institution_id += 1
-
-                institution_name = self._clean_string(
-                    row_dict.get(
-                        institution_table.c.name
+                    student_number = (
+                        f"SEMESTER-TRANSCRIPT-"
+                        f"{transcript_id}"
                     )
-                )
-                destination_institution_uuid = (
-                    destination_institution_lookup.get(
-                        self._normalize(
-                            institution_name
+
+                # -----------------------------------------
+                # Institution ID resolution:
+                # Look up the TypeScript UUID from the
+                # auth service using the Java integer ID.
+                # -----------------------------------------
+
+                destination_institution_uuid = None
+
+                if source_institution_id is not None:
+
+                    destination_institution_uuid = (
+                        institution_id_to_uuid.get(
+                            int(source_institution_id)
                         )
                     )
-                    if institution_name
-                    else
-                    None
-                )
+
+                if not destination_institution_uuid:
+
+                    missing_institution_id += 1
+                    logger.debug(
+                        f"No institution UUID found for "
+                        f"source institution_id="
+                        f"{source_institution_id}, "
+                        f"semester source_id={source_id}"
+                    )
 
                 start_date = self._parse_date(
                     row_dict.get(
@@ -284,6 +342,25 @@ class CCTermMigrator(BaseMigrator):
 
                     invalid_end_date += 1
 
+                # -----------------------------------------
+                # Derive session_name by stripping
+                # parenthesized date portions from term.
+                # e.g. "FALL 2019 (08/26/2019-12/13/2019)"
+                # becomes "FALL 2019"
+                # -----------------------------------------
+
+                term_value = self._clean_string(
+                    row_dict.get(
+                        source_table.c.term
+                    )
+                )
+
+                session_name = None
+                if term_value:
+                    session_name = self.PAREN_STRIP_RE.sub(
+                        "", term_value
+                    ).strip()
+
                 mapped_row = {
                     "uuid": self._stable_uuid(
                         source_id
@@ -297,21 +374,9 @@ class CCTermMigrator(BaseMigrator):
                     ),
                     "institution_id": (
                         destination_institution_uuid
-                        or
-                        (
-                            self._institution_uuid(
-                                source_institution_id
-                            )
-                            if source_institution_id
-                            else
-                            None
-                        )
                     ),
-                    "semester_id": self._truncate(
-                        row_dict.get(
-                            source_table.c.term
-                        ),
-                        255
+                    "semester_id": self._stable_semester_uuid(
+                        source_id
                     ),
                     "gpa": self._float_value(
                         row_dict.get(
@@ -320,13 +385,11 @@ class CCTermMigrator(BaseMigrator):
                     ),
                     "credit_hrs": self._integer_value(
                         row_dict.get(
-                            source_table.c.earned_hours
+                            source_table.c.credit_hrs
                         )
                     ),
                     "term": self._truncate(
-                        row_dict.get(
-                            source_table.c.term
-                        ),
+                        term_value,
                         255
                     ),
                     "year": self._truncate(
@@ -337,6 +400,10 @@ class CCTermMigrator(BaseMigrator):
                     ),
                     "start_date": start_date,
                     "end_date": end_date,
+                    "session_name": self._truncate(
+                        session_name,
+                        255
+                    ),
                     "import_file_uuid": None,
                 }
 
@@ -386,7 +453,7 @@ class CCTermMigrator(BaseMigrator):
                 break
 
         logger.info(
-            "CC Term Import Summary: "
+            "Semester Import Summary: "
             f"source_count={source_count}, "
             f"destination_start_count={destination_count}, "
             f"fetched={fetched_count}, "
@@ -396,86 +463,191 @@ class CCTermMigrator(BaseMigrator):
             f"missing_student_number={missing_student_number}, "
             f"missing_institution_id={missing_institution_id}, "
             f"invalid_start_date={invalid_start_date}, "
-            f"invalid_end_date={invalid_end_date}"
+            f"invalid_end_date={invalid_end_date}, "
+            f"skipped_not_latest_transcript="
+            f"{skipped_not_latest_transcript}"
         )
 
         return inserted_count
 
-    def _count_rows(
+    # -----------------------------------------
+    # Load latest transcript ID per
+    # (stu_identification, institution_id)
+    # -----------------------------------------
+
+    def _load_latest_transcript_ids(
         self,
-        engine,
-        table
+        transcript_table
     ):
+        """
+        Returns a dict mapping
+        (stu_identification, institution_id) -> max(id)
+        so we only pick semesters from the latest
+        transcript per student per institution.
+        """
 
-        with engine.connect() as conn:
-
-            return conn.execute(
-                select(func.count()).select_from(
-                    table
-                )
-            ).scalar() or 0
-
-    def _resolve_table_name(
-        self,
-        engine,
-        primary_name,
-        alias_name
-    ):
-
-        inspector = inspect(
-            engine
-        )
-
-        table_names = set(
-            inspector.get_table_names()
-        )
-
-        if primary_name in table_names:
-
-            return primary_name
-
-        if alias_name in table_names:
-
-            return alias_name
-
-        return primary_name
-
-    def _load_destination_institution_lookup(self):
-
-        auth_rows = self._load_auth_institution_rows()
-
-        if not auth_rows:
-
-            logger.warning(
-                "No auth institution rows loaded; falling back to "
-                "generated institution UUIDs."
+        query = (
+            select(
+                transcript_table.c.stu_identification,
+                transcript_table.c.institution_id,
+                func.max(
+                    transcript_table.c.id
+                ).label("max_id")
             )
+            .where(
+                transcript_table.c.stu_identification.isnot(
+                    None
+                )
+            )
+            .group_by(
+                transcript_table.c.stu_identification,
+                transcript_table.c.institution_id
+            )
+        )
 
-            return {}
+        with self.source_engine.connect() as conn:
+
+            rows = conn.execute(query).fetchall()
 
         lookup = {}
 
-        for row in auth_rows:
+        for row in rows:
 
-            institution_name = self._normalize(
-                row.get("name")
+            row_dict = row._mapping
+            stu_id = self._clean_string(
+                row_dict.get("stu_identification")
             )
-            institution_uuid = row.get(
-                "uuid"
-            )
+            inst_id = row_dict.get("institution_id")
+            max_id = row_dict.get("max_id")
 
-            if institution_name and institution_uuid:
+            if stu_id is not None:
 
                 lookup[
-                    institution_name
-                ] = str(institution_uuid)
-
-        logger.info(
-            "Loaded CCTerm destination institution lookup: "
-            f"{len(lookup)} names"
-        )
+                    (str(stu_id), inst_id)
+                ] = max_id
 
         return lookup
+
+    # -----------------------------------------
+    # Load institution integer ID -> UUID lookup
+    # from auth service database
+    # -----------------------------------------
+
+    def _load_institution_id_to_uuid_lookup(self):
+        """
+        Build a mapping from the Java integer
+        institution.id (source) to the TypeScript
+        UUID in the auth service institutions table.
+
+        Strategy:
+        1. Load all institutions from source DB
+           (gll_prod_new.institution) -> {id: name}
+        2. Load all institutions from auth DB
+           (gllauthservicenew.institutions) -> {name: uuid}
+        3. Join by normalized name to produce
+           {source_int_id: auth_uuid}
+        """
+
+        # Step 1: Load source institution id -> name
+        source_id_to_name = {}
+
+        try:
+
+            source_institution_table = self._manual_reflect(
+                "institution",
+                self.source_engine,
+                self.metadata_source
+            )
+
+            with self.source_engine.connect() as conn:
+
+                rows = conn.execute(
+                    select(
+                        source_institution_table.c.id,
+                        source_institution_table.c.name
+                    )
+                ).fetchall()
+
+            for row in rows:
+
+                row_dict = row._mapping
+                inst_id = row_dict.get("id")
+                inst_name = self._clean_string(
+                    row_dict.get("name")
+                )
+
+                if inst_id is not None and inst_name:
+
+                    source_id_to_name[
+                        int(inst_id)
+                    ] = inst_name
+
+            logger.info(
+                f"Loaded {len(source_id_to_name)} "
+                f"source institutions (id -> name)"
+            )
+
+        except Exception as exc:
+
+            logger.warning(
+                f"Failed loading source institutions: {exc}"
+            )
+
+        # Step 2: Load auth institution name -> uuid
+        auth_name_to_uuid = {}
+
+        auth_rows = self._load_auth_institution_rows()
+
+        for row in auth_rows:
+
+            name = self._normalize(
+                row.get("name")
+            )
+            inst_uuid = row.get("uuid")
+
+            if name and inst_uuid:
+
+                auth_name_to_uuid[name] = str(inst_uuid)
+
+        logger.info(
+            f"Loaded {len(auth_name_to_uuid)} "
+            f"auth institutions (name -> uuid)"
+        )
+
+        # Step 3: Join by normalized name
+        id_to_uuid = {}
+
+        for source_id, source_name in source_id_to_name.items():
+
+            normalized = self._normalize(source_name)
+
+            if normalized in auth_name_to_uuid:
+
+                id_to_uuid[source_id] = (
+                    auth_name_to_uuid[normalized]
+                )
+
+        logger.info(
+            f"Resolved {len(id_to_uuid)} "
+            f"institution ID -> UUID mappings"
+        )
+
+        # Log any unmatched source institutions
+        unmatched = set(source_id_to_name.keys()) - set(
+            id_to_uuid.keys()
+        )
+
+        if unmatched:
+
+            for uid in sorted(unmatched):
+
+                logger.warning(
+                    f"No auth UUID match for source "
+                    f"institution id={uid}, "
+                    f"name='{source_id_to_name[uid]}'"
+                )
+
+        return id_to_uuid
 
     def _load_auth_institution_rows(
         self
@@ -569,6 +741,45 @@ class CCTermMigrator(BaseMigrator):
 
         return auth_database
 
+    def _count_rows(
+        self,
+        engine,
+        table
+    ):
+
+        with engine.connect() as conn:
+
+            return conn.execute(
+                select(func.count()).select_from(
+                    table
+                )
+            ).scalar() or 0
+
+    def _resolve_table_name(
+        self,
+        engine,
+        primary_name,
+        alias_name
+    ):
+
+        inspector = inspect(
+            engine
+        )
+
+        table_names = set(
+            inspector.get_table_names()
+        )
+
+        if primary_name in table_names:
+
+            return primary_name
+
+        if alias_name in table_names:
+
+            return alias_name
+
+        return primary_name
+
     def _get_batch_size(self):
 
         configured = (
@@ -606,6 +817,18 @@ class CCTermMigrator(BaseMigrator):
             uuid.uuid5(
                 uuid.NAMESPACE_URL,
                 f"gll:import-edi-semester:{source_id}"
+            )
+        )
+
+    def _stable_semester_uuid(
+        self,
+        source_id
+    ):
+
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"gll:semester-id:{source_id}"
             )
         )
 

@@ -1293,7 +1293,10 @@ class GLLMigrationEngine:
                 str(
                     m.get("source_table") or ""
                 ).strip().lower()
-                == "cc_term"
+                in (
+                    "cc_term",
+                    "semester",
+                )
             )
 
             or
