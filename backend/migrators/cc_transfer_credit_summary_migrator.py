@@ -386,13 +386,22 @@ class CCTransferCreditSummaryMigrator(BaseMigrator):
     def _migrate_extended_info_institutions(
         self, cc_transcript_table, credential_table, institution_table, destination_table, destination_institution_lookup, batch_size, remaining_limit
     ):
-        logger.info("Starting Phase 2: Migrating from cc_transcript_extended_info.inst_attend...")
+        logger.info("Starting Phase 2: Migrating from transcript_ext.inst_attend...")
         
-        ext_table = self._manual_reflect(
-            "cc_transcript_extended_info",
-            self.source_engine,
-            self.metadata_source
-        )
+        try:
+            ext_table = self._manual_reflect(
+                "transcript_ext",
+                self.source_engine,
+                self.metadata_source
+            )
+            transcript_table = self._manual_reflect(
+                "transcript",
+                self.source_engine,
+                self.metadata_source
+            )
+        except Exception as e:
+            logger.warning(f"Could not load transcript_ext tables: {e}")
+            return 0
 
         last_source_id = 0
         fetched_count = 0
@@ -411,14 +420,14 @@ class CCTransferCreditSummaryMigrator(BaseMigrator):
                 select(
                     ext_table.c.id,
                     ext_table.c.inst_attend,
-                    cc_transcript_table.c.stu_identification,
+                    transcript_table.c.stu_identification,
                     credential_table.c.institution_id,
                     institution_table.c.name
                 )
                 .select_from(
                     ext_table
-                    .join(cc_transcript_table, ext_table.c.transcript_id == cc_transcript_table.c.id)
-                    .join(credential_table, cc_transcript_table.c.credential_id == credential_table.c.id)
+                    .join(transcript_table, ext_table.c.transcript_id == transcript_table.c.id)
+                    .join(credential_table, transcript_table.c.credential_id == credential_table.c.id)
                     .join(institution_table, credential_table.c.institution_id == institution_table.c.id, isouter=True)
                 )
                 .where(ext_table.c.id > last_source_id)
@@ -448,7 +457,7 @@ class CCTransferCreditSummaryMigrator(BaseMigrator):
                 source_id = row_dict.get(ext_table.c.id)
                 last_source_id = source_id
 
-                student_number = self._clean_string(row_dict.get(cc_transcript_table.c.stu_identification))
+                student_number = self._clean_string(row_dict.get(transcript_table.c.stu_identification))
                 if not student_number:
                     continue
 
