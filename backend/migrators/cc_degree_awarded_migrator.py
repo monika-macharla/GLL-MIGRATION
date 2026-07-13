@@ -360,6 +360,127 @@ class CCDegreeAwardedMigrator(BaseMigrator):
             f"invalid_degree_date={invalid_degree_date}"
         )
 
+        inserted_count += self._migrate_4yr_degree_award(
+            credential_table, institution_table, destination_table, destination_institution_lookup, batch_size, remaining_limit
+        )
+
+        return inserted_count
+
+    def _migrate_4yr_degree_award(
+        self, credential_table, institution_table, destination_table, destination_institution_lookup, batch_size, remaining_limit
+    ):
+        logger.info("Starting Phase 2: Migrating from 4yr_degree_award...")
+
+        try:
+            source_4yr = self._manual_reflect(
+                "4yr_degree_award",
+                self.source_engine,
+                self.metadata_source
+            )
+            transcript_table = self._manual_reflect(
+                "transcript",
+                self.source_engine,
+                self.metadata_source
+            )
+        except Exception as e:
+            logger.warning(f"Could not load 4yr_degree_award tables: {e}")
+            return 0
+
+        last_source_id = 0
+        fetched_count = 0
+        prepared_count = 0
+        inserted_count = 0
+        batch_number = 0
+
+        while True:
+            fetch_size = batch_size
+            if remaining_limit is not None:
+                if remaining_limit <= 0:
+                    break
+                fetch_size = min(fetch_size, remaining_limit)
+
+            query = (
+                select(
+                    source_4yr.c.id,
+                    source_4yr.c.transcript_id,
+                    source_4yr.c.name.label("degree"),
+                    source_4yr.c.date.label("confer_date"),
+                    source_4yr.c.major.label("field_of_study"),
+                    transcript_table.c.stu_identification,
+                    credential_table.c.institution_id,
+                    institution_table.c.name.label("institution_name")
+                )
+                .select_from(
+                    source_4yr
+                    .join(transcript_table, source_4yr.c.transcript_id == transcript_table.c.id)
+                    .join(credential_table, transcript_table.c.credential_id == credential_table.c.id)
+                    .join(institution_table, credential_table.c.institution_id == institution_table.c.id, isouter=True)
+                )
+                .where(source_4yr.c.id > last_source_id)
+                .order_by(source_4yr.c.id)
+                .limit(fetch_size)
+            )
+
+            with self.source_engine.connect() as source_conn:
+                rows = source_conn.execute(query).fetchall()
+
+            if not rows:
+                break
+
+            fetched_count += len(rows)
+            if remaining_limit is not None:
+                remaining_limit -= len(rows)
+
+            insert_data = []
+            batch_number += 1
+            now = datetime.utcnow()
+
+            for row in rows:
+                row_dict = row._mapping
+                source_id = row_dict.get(source_4yr.c.id)
+                last_source_id = source_id
+
+                student_number = self._clean_string(row_dict.get(transcript_table.c.stu_identification))
+                if not student_number:
+                    student_number = f"4YR-TRANSCRIPT-{row_dict.get(source_4yr.c.transcript_id)}"
+
+                source_institution_id = row_dict.get(credential_table.c.institution_id)
+                institution_name = self._clean_string(row_dict.get("institution_name"))
+                destination_institution_uuid = (
+                    destination_institution_lookup.get(self._normalize(institution_name)) if institution_name else None
+                )
+
+                degree_date = self._parse_date(row_dict.get("confer_date"))
+
+                mapped_row = {
+                    "uuid": self._stable_uuid(f"4yr_{source_id}"),
+                    "created_at": now,
+                    "updated_at": now,
+                    "deleted_at": None,
+                    "student_number": self._truncate(student_number, 255),
+                    "institution_id": (
+                        destination_institution_uuid or 
+                        (self._institution_uuid(source_institution_id) if source_institution_id else None)
+                    ),
+                    "degree": self._truncate(row_dict.get("degree"), 256),
+                    "degree_date": degree_date,
+                    "field_of_study": self._truncate(row_dict.get("field_of_study"), 256),
+                    "institution_name": self._truncate(institution_name, 256),
+                    "import_file_uuid": None,
+                }
+                insert_data.append(self._filter_to_table_columns(mapped_row, destination_table))
+
+            if insert_data:
+                prepared_count += len(insert_data)
+                statement = mysql_insert(destination_table).prefix_with("IGNORE")
+                with self.dest_engine.begin() as dest_conn:
+                    result = dest_conn.execute(statement, insert_data)
+                inserted_count += result.rowcount or 0
+
+            if len(rows) < fetch_size:
+                break
+
+        logger.info(f"Phase 2 4yr_degree_award Summary: fetched={fetched_count}, prepared={prepared_count}, inserted={inserted_count}")
         return inserted_count
 
     def _count_rows(
