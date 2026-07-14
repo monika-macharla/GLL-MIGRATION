@@ -10,7 +10,7 @@ source db:                          destination db
 
 1. insert roles
 
-2. institution                         institutions,campuses(gllauthservicemigration)
+2. institution                         institutions,campuses(gllauthservice)
 
 3. gl_user                             users(gllauthservicemigration)
 

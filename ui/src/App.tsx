@@ -43,22 +43,22 @@ const API_BASE_URL = window.location.protocol + '//' + window.location.hostname 
 function App() {
 const [source, setSource] = useState<DBConfig>({
   db_type: 'mysql',
-  host: 'gll-prod.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
+  host: 'gll-production.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
   port: 3306,
-  username: 'gll_user',
-  password: 'StrongPaSSW0rdGLL@2026',
-  database: 'gll_prod_new'
+  username: 'gll_prod',
+  password: 'G11XlpM0c6202',
+  database: 'greenlight'
 });
 
   const [dest, setDest] = useState<DBConfig>({
     db_type: 'mysql',
-    host: 'gll-prod.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
+    host: 'gll-production.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
     port: 3306,
-    username: 'gll_user',
-    password: 'StrongPaSSW0rdGLL@2026',
-    database: 'gllauthservicenew',
-    // database: 'gllreportsnew'
-    // database: 'glldataingestionnew'
+    username: 'gll_prod',
+    password: 'G11XlpM0c6202',
+    database: 'gllauthservice',
+    // database: 'gllreports'
+    // database: 'glldataingestion'
   });
 
   const [lookupDatabases, setLookupDatabases] = useState<LookupDBConfig[]>([
@@ -67,9 +67,9 @@ const [source, setSource] = useState<DBConfig>({
     db_type: 'mysql',
     host: 'gll-prod.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
     port: 3306,
-    username: 'gll_user',
+    username: 'gll_prod',
     password: 'StrongPaSSW0rdGLL@2026',
-    database: 'gllauthservicenew'
+    database: 'gllauthservice'
   }
 ]);
 
