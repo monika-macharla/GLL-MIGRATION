@@ -405,10 +405,27 @@ class CCCoursesMigrator(BaseMigrator):
 
                 with self.dest_engine.begin() as dest_conn:
 
-                    result = dest_conn.execute(
-                        statement,
-                        insert_data
-                    )
+                    max_retries = 5
+                    for attempt in range(max_retries):
+                        try:
+                            result = dest_conn.execute(
+                                statement,
+                                insert_data
+                            )
+                            break
+                        except Exception as e:
+                            is_lock_err = False
+                            if hasattr(e, "orig") and e.orig and hasattr(e.orig, "args") and len(e.orig.args) > 0:
+                                if e.orig.args[0] in (1205, 1213):
+                                    is_lock_err = True
+                            
+                            if is_lock_err and attempt < max_retries - 1:
+                                import time
+                                sleep_time = (attempt + 1) * 2
+                                logger.warning(f"Database lock/deadlock error. Retrying chunk {batch_number} in {sleep_time}s... (Attempt {attempt+1}/{max_retries})")
+                                time.sleep(sleep_time)
+                            else:
+                                raise
 
                 inserted_in_chunk = result.rowcount or 0
                 inserted_count += inserted_in_chunk
