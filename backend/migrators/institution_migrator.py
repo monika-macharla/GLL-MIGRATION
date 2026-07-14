@@ -189,6 +189,12 @@ class InstitutionMigrator(BaseMigrator):
                             institution_table,
                             'qual_code'
                         )
+                    if 'speede_code' in dest_table.c:
+                        mapped_row['speede_code'] = self._row_value(
+                            row_dict,
+                            institution_table,
+                            'school_code'
+                        )
                     if 'nsc_receiver_id' in dest_table.c:
                         mapped_row['nsc_receiver_id'] = self._row_value(
                             row_dict,
@@ -747,6 +753,13 @@ class InstitutionMigrator(BaseMigrator):
                         s_dict,
                         institution_table,
                         'qual_code'
+                    )
+
+                if 'speede_code' in dest_table.c:
+                    update_values['speede_code'] = self._row_value(
+                        s_dict,
+                        institution_table,
+                        'school_code'
                     )
 
                 if 'nsc_receiver_id' in dest_table.c:

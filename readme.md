@@ -15,7 +15,8 @@ source db:                          destination db
 3. gl_user                             users(gllauthservicemigration)
 
 4. gl_user                              user_role
-update the user_role site_administrator uuid to issuing adminId
+update the user_role site_administrator uuid to receiver adminId
+
 5. gl_user                              user_institution
 
 gl_parent_student                       parent_student

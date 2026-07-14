@@ -35,7 +35,7 @@ DEFAULT_DB_CONFIG = {
 }
 
 INSTITUTION_ROLE_MAPPING = {
-    1: "site_administrator",
+    1: "receiver_admin",
     2: "institution_admin",
     3: "receiver",
     4: "recruiter",

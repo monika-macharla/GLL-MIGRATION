@@ -743,6 +743,7 @@ class NsapiPreferencesMigrator(BaseMigrator):
             ],
             code_columns=[
                 "qual_code",
+                "speede_code",
                 "nsc_receiver_id"
             ]
         )
