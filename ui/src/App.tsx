@@ -65,10 +65,10 @@ const [source, setSource] = useState<DBConfig>({
   {
     name: 'auth_db',
     db_type: 'mysql',
-    host: 'gll-prod.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
+    host: 'gll-production.cx4i0k8o6lzg.us-east-2.rds.amazonaws.com',
     port: 3306,
     username: 'gll_prod',
-    password: 'StrongPaSSW0rdGLL@2026',
+    password: 'G11XlpM0c6202',
     database: 'gllauthservice'
   }
 ]);
