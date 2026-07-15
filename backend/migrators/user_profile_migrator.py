@@ -238,7 +238,7 @@ class UserProfileMigrator(BaseMigrator):
         if isinstance(clean_value, (datetime, date)):
 
             return clean_value.strftime(
-                "%m-%d-%Y"
+                "%m/%d/%Y"
             )
 
         if isinstance(clean_value, str):
@@ -259,7 +259,7 @@ class UserProfileMigrator(BaseMigrator):
                 return datetime.fromisoformat(
                     normalized_value
                 ).strftime(
-                    "%m-%d-%Y"
+                    "%m/%d/%Y"
                 )
 
             except ValueError:
@@ -285,7 +285,7 @@ class UserProfileMigrator(BaseMigrator):
                         date_part,
                         date_format
                     ).strftime(
-                        "%m-%d-%Y"
+                        "%m/%d/%Y"
                     )
 
                 except ValueError:
