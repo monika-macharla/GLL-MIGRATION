@@ -82,6 +82,13 @@ class CCCoursesMigrator(BaseMigrator):
             self.metadata_source
         )
 
+        semester_table = self._manual_reflect(
+            "semester",
+            self.source_engine,
+            self.metadata_source
+        )
+
+
         destination_table = self._manual_reflect(
             destination_table_name,
             self.dest_engine,
@@ -160,7 +167,8 @@ class CCCoursesMigrator(BaseMigrator):
                     cc_transcript_table.c.stu_identification,
                     credential_table.c.institution_id,
                     institution_table.c.name,
-                    institution_table.c.school_code
+                    institution_table.c.school_code,
+                    semester_table.c.id.label("java_semester_id")
                 )
                 .select_from(
                     source_table
@@ -180,6 +188,13 @@ class CCCoursesMigrator(BaseMigrator):
                         == institution_table.c.id,
                         isouter=True
                     )
+                    .join(
+                        semester_table,
+                        (semester_table.c.transcript_id == source_table.c.transcript_id) &
+                        (semester_table.c.term == source_table.c.term),
+                        isouter=True
+                    )
+                )
                 )
                 .where(
                     source_table.c.id > last_source_id
@@ -328,11 +343,10 @@ class CCCoursesMigrator(BaseMigrator):
                         ),
                         256
                     ),
-                    "semester_id": self._truncate(
-                        row_dict.get(
-                            source_table.c.term
-                        ),
-                        255
+                    "semester_id": (
+                        self._stable_semester_uuid(row_dict.get("java_semester_id"))
+                        if row_dict.get("java_semester_id") is not None
+                        else self._truncate(row_dict.get(source_table.c.term), 255)
                     ),
                     "term_gpa": self._truncate(
                         row_dict.get(
@@ -659,6 +673,19 @@ class CCCoursesMigrator(BaseMigrator):
                 f"gll:import-edi-courses:{source_id}"
             )
         )
+
+    def _stable_semester_uuid(
+        self,
+        source_id
+    ):
+
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"gll:semester-id:{source_id}"
+            )
+        )
+
 
     def _institution_uuid(
         self,
