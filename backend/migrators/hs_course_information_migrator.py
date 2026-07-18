@@ -636,12 +636,13 @@ class HSCourseInformationMigrator(BaseMigrator):
         source_id
     ):
 
-        return str(
+        base_uuid = str(
             uuid.uuid5(
                 uuid.NAMESPACE_URL,
                 f"gll:import-course-information:{source_id}"
             )
         )
+        return f"{int(source_id):08x}{base_uuid[8:]}"
 
     def _institution_uuid(
         self,
